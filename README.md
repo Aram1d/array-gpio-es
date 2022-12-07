@@ -5,7 +5,7 @@
 
 **array-gpio** is a low-level javascript library for Raspberry Pi using a direct register control.
 
-It maps the ARM peripheral registers in memory using */dev/mem* for PWM, I2C, SPI
+It maps the ARM peripheral registers in memory using */dev/mem* for PWM, I2c, SPI
 and */dev/gpiomem* for GPIO control.
 
 One of its features is the use of *array objects* for GPIO input/output control.
@@ -13,7 +13,7 @@ One of its features is the use of *array objects* for GPIO input/output control.
 ### ARM Peripheral Support
 - GPIO
 - PWM
-- I2C
+- I2c
 - SPI
 
 <br>
@@ -43,7 +43,7 @@ For IoT or machine-to-machine applications, please check [m2m](https://www.npmjs
       - [Input](#input-properties)
       - [Output](#output-properties)
     - [PWM](#pwm)
-    - [I2C](#i2c)
+    - [I2c](#i2c)
     - [SPI](#spi)
 
 
@@ -1142,13 +1142,13 @@ process.on('SIGINT', () => {
 ```
 
 ***
-## I2C
+## I2c
 
 ### startI2C()
 
 Sets i2c pins 03 (SDA) and 05 (SCL) to its alternate function (ALT0) for i2c operation.
 
-Returns an i2c object with properties to configure the I2C interface to start the i2c data transfer operation.
+Returns an i2c object with properties to configure the I2c interface to start the i2c data transfer operation.
 
 This operation requires root access.
 

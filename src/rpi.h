@@ -66,7 +66,7 @@ void gpio_reset_event(uint8_t pin);
 void gpio_enable_pud(uint8_t pin, uint8_t value);
 
 /**
- *  PWM
+ *  Pwm
  */
 void pwm_set_pin(uint8_t pin);
 
@@ -89,7 +89,7 @@ void pwm_set_data(uint8_t pin, uint32_t data);
 void pwm_set_range(uint8_t pin, uint32_t range);
 
 /**
- *  I2C
+ *  I2c
  */
 int i2c_start();
 
@@ -110,7 +110,7 @@ uint8_t i2c_read(char * rbuf, uint8_t len);
 uint8_t i2c_byte_read();
 
 /**
- *  SPI
+ *  Spi
  */
 int spi_start();
 

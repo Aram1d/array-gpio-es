@@ -7,7 +7,7 @@
 
 'use strict';
 
-const rpi = require('./rpi.js');
+const rpi = require('./rpi.ts');
 
 //var watchData = [];
 

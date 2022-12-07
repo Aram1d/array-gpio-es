@@ -35,7 +35,7 @@
 #define CORE_CLK_FREQ		250000000 // 250 MHz 
 
 /* Dynamic CORE_CLOCK_FREQ for different models
- * that can affect UART, SPI and I2C performance
+ * that can affect UART, Spi and I2c performance
  */
 #define	CORE_CLOCK_FREQ_RPI1	250000000 // 250 MHz 
 #define	CORE_CLOCK_FREQ_RPI23	400000000 // 400 MHz
@@ -72,7 +72,7 @@
 #define ST_C2		(ST_PERI_BASE + 0x14/4)
 #define ST_C3		(ST_PERI_BASE + 0x18/4)
  
-/* PWM control manager clocks control registers
+/* Pwm control manager clocks control registers
  * https://www.scribd.com/doc/127599939/BCM2835-Audio-clocks
  * 0x28 hex/40 dec from 0x7e1010+(a0/4) CM_PWMCTL or using 0x20 hex/32 dec from 0x7e1010+(80/4) CM_GP2CTL
  * 0x29 hex/41 dec from 0x7e1010+(a4/4) CM_PWMDIV or using 0x21 hex/33 dec from 0x7e1010+(84/4) CM_GP2DIV
@@ -113,7 +113,7 @@
 #define GPIO_GPPUDCLK0	(GPIO_PERI_BASE + 0x98/4)	
 #define GPIO_GPPUDCLK1	(GPIO_PERI_BASE + 0x9C/4)		
 
-/* SPI registers */
+/* Spi registers */
 #define SPI_PERI_BASE	base_pointer[3]	// SPI0_BASE
 #define SPI_CS		(SPI_PERI_BASE + 0x00/4) 
 #define SPI_FIFO	(SPI_PERI_BASE + 0x04/4)
@@ -122,7 +122,7 @@
 #define SPI_LTOH	(SPI_PERI_BASE + 0x10/4)
 #define SPI_DC		(SPI_PERI_BASE + 0x14/4)
 
-/* PWM control and status registers */
+/* Pwm control and status registers */
 #define PWM_PERI_BASE	base_pointer[4]	// PWM_BASE
 #define PWM_CTL		(PWM_PERI_BASE + 0x00/4) 			
 #define PWM_STA		(PWM_PERI_BASE + 0x04/4)		
@@ -132,7 +132,7 @@
 #define PWM_RNG2    	(PWM_PERI_BASE + 0x20/4)
 #define PWM_DAT2	(PWM_PERI_BASE + 0x24/4)
 
-/* I2C registers */
+/* I2c registers */
 #define I2C_PERI_BASE	base_pointer[5]	// BSC1_BASE
 #define I2C_C		(I2C_PERI_BASE + 0x00/4)
 #define I2C_S		(I2C_PERI_BASE + 0x04/4)  
@@ -332,7 +332,7 @@ void start_mmap(int access){
  * using mmap() either using "/dev/gpiomem" or "/dev/mem"
  *
  * access = 0	("/dev/gpiomem") 	// GPIO
- * access = 1	("/dev/mem") 		// PWM, I2C, SPI
+ * access = 1	("/dev/mem") 		// Pwm, I2c, Spi
  */
 void rpi_init(int access) {
     	set_peri_base_address(0, 0, 1);
@@ -773,10 +773,10 @@ void gpio_enable_pud(uint8_t pin, uint8_t value) {
 
 /*********************************
 
-	PWM Setup functions
+	Pwm Setup functions
 
 *********************************/
-/* Reset all PWM pins to GPIO input */
+/* Reset all Pwm pins to GPIO input */
 void pwm_reset_all_pins(){
 	gpio_input(18); // GPIO 18/PHY pin 12, channel 1
 	mswait(1);
@@ -787,7 +787,7 @@ void pwm_reset_all_pins(){
 	gpio_input(19); // GPIO 19/PHY pin 35, channel 2
 } 
 
-/* Set a GPIO pin to its ALT-Func for PWM */
+/* Set a GPIO pin to its ALT-Func for Pwm */
 void pwm_set_pin(uint8_t pin){
   	if(pin == 12||pin ==13) {       // alt 100b, PHY pin 33, GPIO 13, alt 0 
     		set_gpio(pin, 4);	// alt 100b, PHY pin 32, GPIO 12, alt 0
@@ -797,13 +797,13 @@ void pwm_set_pin(uint8_t pin){
  	}
   	else {
         	printf("%s() error: ", __func__);
-		puts("Invalid pin number for PWM.");
+		puts("Invalid pin number for Pwm.");
 		puts("Choose only from board header layout pins 12, 32, 33 and 35.");
 		exit(1);
   	}
 }
 
-/* Reset a PWM pin back to GPIO Input */
+/* Reset a Pwm pin back to GPIO Input */
 void pwm_reset_pin(uint8_t pin){
 	if(pin == 18||pin ==12||pin==13||pin==19) {     
     		gpio_input(pin);	// GPIO18/PHY12, GPIO12/PHY32, GPIO13/PHY33, GPIO19/PHY35
@@ -817,7 +817,7 @@ void pwm_reset_pin(uint8_t pin){
 
 /*****************************************
 
-	PWM Clock operation functions
+	Pwm Clock operation functions
 
 ******************************************/
 /* define clock source constants */
@@ -851,7 +851,7 @@ void set_clock_div(uint32_t div){
 	// using 5A as clock manager password for PASSWD field
 	// on bit num 31-21
 
-	/* disable PWM while performing clk operations */
+	/* disable Pwm while performing clk operations */
 	clearBit(PWM_CTL, 0);
 	clearBit(PWM_CTL, 8);
 
@@ -906,10 +906,10 @@ uint8_t pwm_set_clock_freq(uint32_t divider) {
 
 /***************************************
 
-	PWM Operation functions
+	Pwm Operation functions
 
 ***************************************/
-/* Monitor PWM status register and reset accordingly
+/* Monitor Pwm status register and reset accordingly
  * (Internal use only)
  */
 void reset_status_reg(){
@@ -944,7 +944,7 @@ void reset_status_reg(){
 }
 
 /* Set and Clear bits based on Field Name (or Bit position)
- * (Internal PWM Control Register utility function)
+ * (Internal Pwm Control Register utility function)
  */
 void pwm_reg_ctrl(uint8_t n, uint8_t position){
 	if(n == 1){
@@ -959,7 +959,7 @@ void pwm_reg_ctrl(uint8_t n, uint8_t position){
    	uswait(10); 
 }
 
-/* Enable/Disable PWM
+/* Enable/Disable Pwm
  *
  * n = 0 (Disable)
  * n = 1 (Enable)
@@ -979,9 +979,9 @@ void pwm_enable(uint8_t pin, uint8_t n){
 	}
 }
 
-/* Enable PWM or M/S (mark/space)
+/* Enable Pwm or M/S (mark/space)
  *
- * n = 0 (Enable PWM)
+ * n = 0 (Enable Pwm)
  * n = 1 (Enable M/S)
  */
 void pwm_set_mode(uint8_t pin, uint8_t n){
@@ -999,7 +999,7 @@ void pwm_set_mode(uint8_t pin, uint8_t n){
 	}
 }
 
-/* PWM output Reverse Polarity  (duty cycle inversion)
+/* Pwm output Reverse Polarity  (duty cycle inversion)
  *
  * n = 0 (Normal)
  * n = 1 (Reverse)
@@ -1057,17 +1057,17 @@ void pwm_set_data(uint8_t pin, uint32_t data){
 
 /**************************************************
 
-	Helper functions for I2C and SPI
+	Helper functions for I2c and Spi
 
  **************************************************/
-/* Clear FIFO buffer function for I2C and SPI operation */
+/* Clear FIFO buffer function for I2c and Spi operation */
 void clear_fifo(volatile uint32_t* reg){
 	setBit(reg, 4); // Set bit 4 of CLEAR field
 	setBit(reg, 5); // Set bit 5 of CLEAR field
 
 	/* alternative code */
 
-	//uint32_t mask = (3 << 4);	// create a mask to set bit 4 and 5 (CLEAR field) to 1 (covers both I2C & SPI FIFO)   
+	//uint32_t mask = (3 << 4);	// create a mask to set bit 4 and 5 (CLEAR field) to 1 (covers both I2c & Spi FIFO)
 	//*reg |= mask;			// using bitwise OR assignment to clear FIFO
 
 	//uint32_t mask = 0x00000010;	// mask to clear bit 4 (CLEAR field) only	
@@ -1076,7 +1076,7 @@ void clear_fifo(volatile uint32_t* reg){
 
 /****************************
 
-	I2C Functons
+	I2c Functons
 
 *****************************/
 uint8_t i2c_pin_set = 1;
@@ -1091,7 +1091,7 @@ void i2c_reset_error_status(){
 // Write cycles place data into the 16-byte FIFO ready for BSC bus transmission (sends data to FIFO)
 // Read cycles access data received from the BSC bus (read data from FIFO).
 
-/* Start I2C operation */
+/* Start I2c operation */
 int i2c_start()
 {
 	//rpi_init(1);
@@ -1099,7 +1099,7 @@ int i2c_start()
 	
 	if ( I2C_C == 0 ){
 		printf("%s() error: ", __func__);
-		puts("Invalid I2C registers addresses.");
+		puts("Invalid I2c registers addresses.");
 		return 0; 
 	}
 
@@ -1113,12 +1113,12 @@ int i2c_start()
 
 	mswait(10);
 	
-	setBit(I2C_C, 15);	// set I2CEN field,  enable I2C operation  (BSC controller is enabled)
+	setBit(I2C_C, 15);	// set I2CEN field,  enable I2c operation  (BSC controller is enabled)
 
 	return 1;		// i2c initialization is successful
 }
 
-/* Start I2C operation immediately w/o calling 'rpi_init(1)' 
+/* Start I2c operation immediately w/o calling 'rpi_init(1)'
  * (Initialization process is integrated with the function) 
  *
  * Choose the set of pins (SDA/SCL) to use
@@ -1141,7 +1141,7 @@ int i2c_init(uint8_t value)
 
 	if (I2C_C == 0){
 		printf("%s() error: ", __func__);
-		puts("Invalid I2C register addresses.");
+		puts("Invalid I2c register addresses.");
 		return 0; 
 	}
 
@@ -1160,7 +1160,7 @@ int i2c_init(uint8_t value)
 
 	mswait(10);
 
-	setBit(I2C_C, 15);	// set I2CEN field,  enable I2C operation  (BSC controller is enabled)
+	setBit(I2C_C, 15);	// set I2CEN field,  enable I2c operation  (BSC controller is enabled)
 	// or
 	//*I2C_C |= 0x00008000;
 
@@ -1492,14 +1492,14 @@ uint8_t i2c_byte_read(void){
 	return data;
 }
 
-/* Stop I2C operation, reset pin as input */
+/* Stop I2c operation, reset pin as input */
 void i2c_stop() {
 
 	clear_fifo(I2C_C);
 
 	i2c_reset_error_status();
 
-	clearBit(I2C_C, 15);	/* clear I2CEN field to disable I2C operation (BSC controller is disabled) */
+	clearBit(I2C_C, 15);	/* clear I2CEN field to disable I2c operation (BSC controller is disabled) */
 
 	if(i2c_pin_set == 0){
         //puts("reset SDA0/SCL0 pins to GPIO input");
@@ -1515,10 +1515,10 @@ void i2c_stop() {
 
 /****************************
 
-	    SPI Functons
+	    Spi Functons
 
 *****************************/
-/* Start SPI operation */
+/* Start Spi operation */
 int spi_start()
 {
     //rpi_init(1);
@@ -1527,7 +1527,7 @@ int spi_start()
 	__sync_synchronize(); 
 	if (SPI_CS == 0){
 		printf("%s() error: ", __func__);
-  		puts("Invalid SPI registers addresses.");
+  		puts("Invalid Spi registers addresses.");
   		return 0; 
 	}
 
@@ -1539,16 +1539,16 @@ int spi_start()
 
 	mswait(10);
 
-	clearBit(SPI_CS, 13); 	// set SPI to SPI Master (Standard SPI)
-	clear_fifo(SPI_CS); 	// Clear SPI TX and RX FIFO 
+	clearBit(SPI_CS, 13); 	// set Spi to Spi Master (Standard Spi)
+	clear_fifo(SPI_CS); 	// Clear Spi TX and RX FIFO
 
 	return 1;
 }
 
-/* Stop SPI operation */
+/* Stop Spi operation */
 void spi_stop() {
 
-	clear_fifo(SPI_CS);	  // Clear SPI TX and RX FIFO 
+	clear_fifo(SPI_CS);	  // Clear Spi TX and RX FIFO
 
 	set_gpio(8,  0);  // PHY 24, GPIO 8,  using value 0 , set to input  CE0
 	set_gpio(7,  0);  // PHY 26, GPIO 7,  using value 0 , set to input  CE1
@@ -1557,7 +1557,7 @@ void spi_stop() {
 	set_gpio(11, 0);  // PHY 23, GPIO 11, using value 0 , set to input  SCLK
 }
 
-/* Set SPI clock frequency */
+/* Set Spi clock frequency */
 void spi_set_clock_freq(uint16_t divider){
 
 	volatile uint32_t *div = SPI_CLK;
@@ -1565,12 +1565,12 @@ void spi_set_clock_freq(uint16_t divider){
     	*div = divider;
 }
 
-/* Set SPI data mode
+/* Set Spi data mode
  *
- * SPI Mode0 = 0,  CPOL = 0, CPHA = 0
- * SPI Mode1 = 1,  CPOL = 0, CPHA = 1
- * SPI Mode2 = 2,  CPOL = 1, CPHA = 0
- * SPI Mode3 = 3,  CPOL = 1, CPHA = 1
+ * Spi Mode0 = 0,  CPOL = 0, CPHA = 0
+ * Spi Mode1 = 1,  CPOL = 0, CPHA = 1
+ * Spi Mode2 = 2,  CPOL = 1, CPHA = 0
+ * Spi Mode3 = 3,  CPOL = 1, CPHA = 1
  */
 void spi_set_data_mode(uint8_t mode){
     
@@ -1600,12 +1600,12 @@ void spi_set_data_mode(uint8_t mode){
     volatile uint32_t *cs = SPI_CS;
     uint32_t mask = ~ (3 <<  2);		// clear bit position 2 and 3 first
     *cs &= mask;	  			// set mask to 0
-    mask = (mode <<  2); 			// write mode value to set SPI data mode   
+    mask = (mode <<  2); 			// write mode value to set Spi data mode
     *cs |= mask; 	  			// set data mode
     */
 }
 
-/* SPI Chip Select
+/* Spi Chip Select
  *
  * 0  (00) = Chip select 0
  * 1  (01) = Chip select 1
@@ -1618,7 +1618,7 @@ void spi_chip_select(uint8_t cs)
 
 	uint32_t mask = ~ (3 <<  0);	// clear bit 0 and 1 first
 	*cs_addr &= mask;		// set mask to value 0
-	mask = (cs <<  0);		// write cs value to set SPI data mode   
+	mask = (cs <<  0);		// write cs value to set Spi data mode
 	*cs_addr |= mask; 		// set cs value 
 }
 
@@ -1696,7 +1696,7 @@ void spi_data_transfer(char* wbuf, char* rbuf, uint8_t len)
 	}
 }
 
-/* Writes a number of bytes to SPI device */
+/* Writes a number of bytes to Spi device */
 void spi_write(char* wbuf, uint8_t wbuf_len)
 {
 	volatile uint32_t *fifo = SPI_FIFO;
@@ -1720,7 +1720,7 @@ void spi_write(char* wbuf, uint8_t wbuf_len)
 	}
 }
 
-/* read a number of bytes from SPI device */
+/* read a number of bytes from Spi device */
 void spi_read(char* rbuf, uint8_t rbuf_len)
 {
 	volatile uint32_t *fifo = SPI_FIFO;

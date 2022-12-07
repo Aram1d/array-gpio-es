@@ -205,7 +205,7 @@ NAN_METHOD(gpio_enable_pud)
 }
 
 /*
- *  PWM
+ *  Pwm
  */
 NAN_METHOD(pwm_set_pin)
 {
@@ -424,7 +424,7 @@ NAN_METHOD(i2c_byte_read)
 }
 
 /*
- *  SPI
+ *  Spi
  */
 NAN_METHOD(spi_start)
 {
