@@ -1,3 +1,3 @@
-'use strict';
+"use strict";
 
-module.exports = require('./lib/array-gpio.js');
+module.exports = require("./libSrc/array-gpio.js");
