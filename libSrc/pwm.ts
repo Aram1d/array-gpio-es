@@ -4,16 +4,19 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
+import { rpi } from "./rpi";
 
-"use strict";
-
-const rpi = require("./rpi.js");
-
-var Freq = 1,
-  pwmObject = 0;
+let Freq = 1;
+let pwmObject = 0;
 
 class PWM {
-  constructor(pin, freq, T, pw) {
+  _T: any;
+  _pw: any;
+  _pin: number;
+  _freq: number;
+  _pwmStarted: boolean;
+  _pinOnlySetup: boolean;
+  constructor(pin: number, freq: number, T: number, pw: number) {
     /* track pwm object */
     pwmObject += 1;
     exports.pwmObject = pwmObject;
@@ -22,11 +25,8 @@ class PWM {
     this._pw = pw;
     this._pin = pin;
     this._freq = freq;
-    this._pinOnlySetup = false;
-
-    if (freq === 1) {
-      this._pinOnlySetup = true;
-    }
+    this._pwmStarted = false;
+    this._pinOnlySetup = freq === 1;
 
     /*
      * initilize PWM
@@ -58,22 +58,20 @@ class PWM {
   }
 
   /* initialize PWM object */
-  enable(start) {
+  enable(start: boolean) {
     rpi.pwmSetup(this._pin, start);
   }
 
   /* set oscillator clock frequency using a divider value */
-  setClockFreq(div) {
+  setClockFreq(div: number) {
     if (div > 0 && div < 4095) {
       rpi.pwmSetClockDivider(div);
-      var freq = Math.round(19200000 / div);
+      const freq = Math.round(19200000 / div);
       Freq = freq / 1000;
 
       if (pwmObject === 1) {
         setImmediate(function () {
-          console.log(
-            "Frequency calculation (div " + div + "): " + Freq + " KHz"
-          );
+          console.log(`Frequency calculation (div " + div + "): ${Freq} KHz`);
         });
       }
       exports.Freq = Freq;
@@ -85,8 +83,7 @@ class PWM {
   /*
    *  set period T or space value from m/s mode
    */
-  setRange(range) {
-    // console.log('this. _pin ' + this._pin + ' this._T ' + this._T + ' range ' + range + ' this._pw ' + this._pw );
+  setRange(range: number) {
     this._T = range;
     rpi.pwmSetRange(this._pin, range);
   }
@@ -94,14 +91,14 @@ class PWM {
   /*
    * set pw(pulse width) over period T or mark value over space
    */
-  setData(data) {
+  setData(data: number) {
     this._pw = data;
     this.enable(true);
 
     /* validate pw vs range */
     if (Freq === 10 || Freq === 100 || Freq === 1000 || Freq === 1) {
       if (this._T === 0) {
-        console.log("Alert! pin " + this._pin + " period T or range is zero.");
+        console.log(`Alert! pin ${this._pin} period T or range is zero.`);
       }
 
       if (data > 0 && data <= this._T) {
@@ -134,7 +131,7 @@ class PWM {
     this._pwmStarted = false;
   }
 
-  pulse(pw) {
+  pulse(pw: number) {
     if (!this._pwmStarted) {
       this.enable(true);
     }

@@ -5,11 +5,10 @@
  * MIT Licensed
  */
 
-"use strict";
+import { i2cPinSet } from "./rpi";
 
-const rpi = require("./rpi.js");
-
-var test = false;
+const rpi = require("./rpi.ts");
+let test = false;
 
 /*
  * i2c class
@@ -19,7 +18,7 @@ class I2C {
   	this.begin();
 }*/
 
-  constructor(pinSet) {
+  constructor(pinSet: i2cPinSet) {
     if (!pinSet) {
       this.startI2C(1);
     } else {
@@ -31,7 +30,7 @@ class I2C {
     return rpi.i2cBegin();
   }
 
-  startI2C(pinSet) {
+  startI2C(pinSet: i2cPinSet) {
     return rpi.i2cInit(pinSet);
   }
 
@@ -39,29 +38,23 @@ class I2C {
     test = true;
   }
 
-  setBaudRate(baud) {
-    if (test) {
-      return;
-    }
+  setBaudRate(baud: number) {
+    if (test) return;
     rpi.i2cSetBaudRate(baud);
-    var Baud = baud / 1000;
-    console.log("I2C data rate: " + Baud + " kHz");
+    console.log(`I2C data rate: ${baud / 1000} kHz`);
   }
 
-  setTransferSpeed(baud) {
-    if (test) {
-      return;
-    }
+  setTransferSpeed(baud: number) {
+    if (test) return;
     rpi.i2cSetBaudRate(baud);
-    var Baud = baud / 1000;
-    console.log("I2C data rate: " + Baud + " kHz");
+    console.log(`I2C data rate: ${baud / 1000} kHz`);
   }
 
-  setClockFreq(div) {
-    var freq = Math.round(250000000 / div);
-    var Freq = Math.round(freq / 1000);
+  setClockFreq(div: number) {
+    const freq = Math.round(250000000 / div);
+    const Freq = Math.round(freq / 1000);
 
-    console.log("I2C data rate: " + Freq + " kHz (div " + div + ")");
+    console.log(`I2C data rate: ${Freq} kHz (div ${div})`);
     if (test) {
       return;
     }
@@ -69,15 +62,13 @@ class I2C {
   }
 
   /* returns 1 if successful, otherwise returns 0*/
-  setSlaveAddress(value) {
-    if (test) {
-      return;
-    }
+  setSlaveAddress(value: number) {
+    if (test) return;
     return rpi.i2cSetSlaveAddress(value);
   }
 
   /* returns 1 if successful, otherwise returns 0*/
-  selectSlave(value) {
+  selectSlave(value: number) {
     if (test) {
       return;
     }
@@ -85,18 +76,14 @@ class I2C {
   }
 
   /* read data bytes from periphetal registers using node buffer objects */
-  read(buf, len) {
-    if (test) {
-      return;
-    }
+  read(buf: Buffer, len: number) {
+    if (test) return;
     rpi.i2cRead(buf, len);
   }
 
   /* write data bytes to periphetal registers using node buffer objects */
-  write(buf, len) {
-    if (test) {
-      return;
-    }
+  write(buf: Buffer, len: number) {
+    if (test) return;
     rpi.i2cWrite(buf, len);
   }
 

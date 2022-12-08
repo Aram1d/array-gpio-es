@@ -4,20 +4,17 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-
-"use strict";
-
-const rpi = require("./rpi.js");
+import { rpi, SpiDataMode } from "./rpi";
 
 /*
  * spi class
  */
 
-var test = false;
-
 class SPI {
+  isTest: boolean;
   constructor() {
     this.begin();
+    this.isTest = false;
   }
 
   /* returns 1 if successful, otherwise returns 0*/
@@ -26,26 +23,22 @@ class SPI {
   }
 
   test() {
-    test = true;
+    this.isTest = true;
   }
 
-  setDataMode(mode) {
+  setDataMode(mode: SpiDataMode) {
     rpi.spiSetDataMode(mode);
   }
 
   /* 250MHz on RPi1 and RPi2, and 400MHz on RPi3 */
-  setClockFreq(div) {
-    var clock1 = 250000000;
-    var clock3 = 400000000;
+  setClockFreq(div: number) {
+    const clock1 = 250000000;
+    const clock3 = 400000000;
 
-    var boardRev = rpi.spiGetBoardRev();
-    if (boardRev === 8322) {
-      var freq = Math.round(clock3 / div);
-    } else {
-      var freq = Math.round(clock1 / div);
-    }
-
-    var Freq = freq / 1000;
+    const boardRev = rpi.spiGetBoardRev();
+    const freq =
+      boardRev === 8322 ? Math.round(clock3 / div) : Math.round(clock1 / div);
+    const Freq = freq / 1000;
 
     console.log("SPI clock freq: " + Freq + " kHz (div " + div + ")");
 
@@ -53,51 +46,46 @@ class SPI {
   }
 
   /* 250MHz on RPi1 and RPi2, and 400MHz on RPi3 */
-  setClock(div) {
-    var clock1 = 250000000;
-    var clock3 = 400000000;
+  setClock(div: number) {
+    const clock1 = 250000000;
+    const clock3 = 400000000;
 
-    var boardRev = rpi.spiGetBoardRev();
-    if (boardRev === 8322) {
-      var freq = Math.round(clock3 / div);
-    } else {
-      var freq = Math.round(clock1 / div);
-    }
-
-    var Freq = freq / 1000;
+    const boardRev = rpi.spiGetBoardRev();
+    const freq =
+      boardRev === 8322 ? Math.round(clock3 / div) : Math.round(clock1 / div);
+    const Freq = freq / 1000;
 
     console.log("SPI clock freq: " + Freq + " kHz (div " + div + ")");
-
     rpi.spiSetClockDivider(div);
   }
 
-  setCSPolarity(cs, active) {
+  setCSPolarity(cs: 0 | 1 | 2, active: 0 | 1) {
     rpi.spiSetCSPolarity(cs, active);
   }
 
-  chipSelect(cs) {
+  chipSelect(cs: 0 | 1 | 2 | 3) {
     rpi.spiChipSelect(cs);
   }
 
   /* transfer data bytes to/from periphetal registers using node buffer objects */
-  transfer(wbuf, rbuf, len) {
-    if (test) {
+  transfer(wbuf: Buffer, rbuf: Buffer, len: number) {
+    if (this.isTest) {
       return;
     }
     rpi.spiTransfer(wbuf, rbuf, len);
   }
 
   /* transfer data bytes to periphetal registers using node buffer objects */
-  write(wbuf, len) {
-    if (test) {
+  write(wbuf: Buffer, len: number) {
+    if (this.isTest) {
       return;
     }
     rpi.spiWrite(wbuf, len);
   }
 
   /* transfer data bytes from periphetal registers using node buffer objects */
-  read(rbuf, len) {
-    if (test) {
+  read(rbuf: Buffer, len: number) {
+    if (this.isTest) {
       return;
     }
     rpi.spiRead(rbuf, len);

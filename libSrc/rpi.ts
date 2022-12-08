@@ -5,26 +5,29 @@
  * MIT Licensed
  *
  */
+import fs, { Stats } from "fs";
+import os from "os";
+import bindings from "bindings";
+import { GpioBit } from "./gpio-output";
+const cc = bindings("node_rpi");
 
-"use strict";
-
-const fs = require("fs");
-const os = require("os");
-const cc = require("bindings")("node_rpi");
+export type RpiInitAccess = 0 | 1;
+export type GpioOpenMode = 0 | 1;
+export type SpiDataMode = 0 | 1 | 2 | 3;
+export type i2cPinSet = 0 | 1;
+export type InputEdge = 0 | 1 | "both";
+export type WatchCallback = (state: GpioBit, pin: number) => void;
 
 const EventEmitter = require("events");
 class StateEmitter extends EventEmitter {}
 const emitter = (exports.emitter = new StateEmitter());
 emitter.setMaxListeners(2);
 
-var match;
-var BoardRev;
-var BcmPin = {};
-var inputPin = [];
-var outputPin = [];
-var watchData = [];
-var eventStarted = null;
-var rpiSetup = {
+let BoardRev: number;
+const inputPin = new Set<number>();
+const outputPin = new Set<number>();
+const watchData = new Map<number, NodeJS.Timer>();
+const rpiSetup = {
   initialized: false,
   gpiomem: false,
   initI2c: false,
@@ -92,47 +95,81 @@ if (os.arch() === "arm" || os.arch() === "arm64") {
  *
  * -1 indicates a power supply or a ground pin.
  */
-var pinLayout = [
-  -1, -1, -1 /* P1   P2  */, 2, -1 /* P3   P4  */, 3, -1 /* P5   P6  */, 4,
-  14 /* P7   P8  */, -1, 15 /* P9   P10 */, 17, 18 /* P11  P12 */, 27,
-  -1 /* P13  P14 */, 22, 23 /* P15  P16 */, -1, 24 /* P17  P18 */, 10,
-  -1 /* P19  P20 */, 9, 25 /* P21  P22 */, 11, 8 /* P23  P24 */, -1,
-  7 /* P25  P26 */, 0, 1 /* P27  P28 */, 5, -1 /* P29  P30 */, 6,
-  12 /* P31  P32 */, 13, -1 /* P33  P34 */, 19, 16 /* P35  P36 */, 26,
-  20 /* P37  P38 */, -1, 21 /* P39  P40 */,
-];
+
+const pinMap = new Map([
+  [0, -1],
+  [1, -1],
+  [2, -1],
+  [3, 2],
+  [4, -1],
+  [5, 3],
+  [6, -1],
+  [7, 4],
+  [8, 14],
+  [9, -1],
+  [10, 15],
+  [11, 17],
+  [12, 18],
+  [13, 27],
+  [14, -1],
+  [15, 22],
+  [16, 23],
+  [17, -1],
+  [18, 24],
+  [19, 10],
+  [20, -1],
+  [21, 9],
+  [22, 25],
+  [23, 11],
+  [24, 8],
+  [25, -1],
+  [26, 7],
+  [27, 0],
+  [28, 1],
+  [29, 5],
+  [30, -1],
+  [31, 6],
+  [32, 12],
+  [33, 13],
+  [34, -1],
+  [35, 19],
+  [36, 16],
+  [37, 26],
+  [38, 20],
+  [39, -1],
+  [40, 21],
+]);
 
 /* Convert physical board pinout number to BCM pin numbering */
-function convertPin(pin) {
-  if (BcmPin[pin]) {
-    return BcmPin[pin];
-  }
-  if (pinLayout[pin] === -1 || pinLayout[pin] === null) {
-    throw new Error(pin, "is invalid!");
-  }
-  BcmPin[pin] = pinLayout[pin];
-  return BcmPin[pin];
+function convertPin(pin: number) {
+  const gpioNumber = pinMap.get(pin);
+  if (gpioNumber === -1) throw new Error(`Pin ${pin} is not GPIO`);
+  if (gpioNumber === undefined) throw new Error(`Pin ${pin} is invalid`);
+  return gpioNumber;
 }
 
 /* Check if the pin is being used by another application using '/sys/class/gpio/gpio' */
-function check_sys_gpio(gpioPin, pin) {
-  fs.stat("/sys/class/gpio/gpio" + gpioPin, (err, stats) => {
-    if (err) {
-      if (err.code === "ENOENT") {
-        // '/sys/class/gpio/gpio' + gpioPin file does not exist
-        return;
+function check_sys_gpio(gpioPin: number, pin: number) {
+  fs.stat(
+    "/sys/class/gpio/gpio" + gpioPin,
+    (err: NodeJS.ErrnoException | null, stats: Stats) => {
+      if (err) {
+        if (err.code === "ENOENT") {
+          // '/sys/class/gpio/gpio' + gpioPin file does not exist
+          return;
+        }
+        throw err;
       }
-      throw err;
+      if (stats) {
+        // fs.writeFileSync('/sys/class/gpio/' + 'unexport', pin);
+        console.log(`\n*** pin ${pin} is being used in /sys/class/gpio file"`);
+        console.log(
+          "*** Please check if another application is using this pin"
+        );
+        throw pin;
+      }
     }
-    if (stats) {
-      // fs.writeFileSync('/sys/class/gpio/' + 'unexport', pin);
-      console.log(
-        "\n*** pin " + pin + " is being used in /sys/class/gpio file"
-      );
-      console.log("*** Please check if another application is using this pin");
-      throw pin;
-    }
-  });
+  );
 }
 
 /* error message for rpi mode conflict */
@@ -153,35 +190,31 @@ function rpiModeConflict() {
  *  Incorrect use of this functions may cause hang-up/file corruptions
  */
 class Rpi {
-  constructor() {
-    this.LOW = 0x0;
-    this.HIGH = 0x1;
+  LOW = 0x0 as const;
+  HIGH = 0x1 as const;
 
-    this.INPUT = 0x0;
-    this.OUTPUT = 0x1;
+  INPUT = 0x0 as const;
+  OUTPUT = 0x1 as const;
 
-    this.PULL_OFF = 0x0;
-    this.PULL_DOWN = 0x1;
-    this.PULL_UP = 0x2;
+  PULL_OFF = 0x0 as const;
+  PULL_DOWN = 0x1 as const;
+  PULL_UP = 0x2 as const;
 
-    this.FALLING_EDGE = 0x1;
-    this.RISING_EDGE = 0x2;
-    this.BOTH = 0x3;
-  }
+  FALLING_EDGE = 0x1 as const;
+  RISING_EDGE = 0x2 as const;
+  BOTH = 0x3 as const;
+
+  constructor() {}
 
   /*
    * rpi lib access methods
    */
-  lib_init(access) {
+  lib_init(access: RpiInitAccess) {
     /* reset pin store */
-    BcmPin = {};
+    // BcmPin = {};
     cc.rpi_init(access);
 
-    if (access === 0) {
-      rpiSetup.gpiomem = true; // rpi in dev/gpiomem for GPIO
-    } else {
-      rpiSetup.gpiomem = false; // rpi in dev/mem for i2c, spi, pwm
-    }
+    rpiSetup.gpiomem = access === 0; // true: rpi in dev/gpiomem for GPIO, false : rpi in dev/mem for i2c, spi, pwm
     rpiSetup.initialized = true; // rpi must be initialized only once
   }
 
@@ -192,8 +225,8 @@ class Rpi {
   /*
    * GPIO
    */
-  gpio_open(pin, mode, init) {
-    var gpioPin = convertPin(pin);
+  gpio_open(pin: number, mode: GpioOpenMode, init?: number) {
+    const gpioPin = convertPin(pin);
     if (!rpiSetup.initialized) {
       this.lib_init(0);
     }
@@ -206,7 +239,7 @@ class Rpi {
 
     /* set as INPUT */
     if (mode === this.INPUT) {
-      var result = cc.gpio_config(gpioPin, this.INPUT);
+      const result = cc.gpio_config(gpioPin, this.INPUT);
 
       if (init) {
         cc.gpio_enable_pud(gpioPin, init);
@@ -217,29 +250,19 @@ class Rpi {
         ); /* initial PUD setup, none */
       }
       // track all input pins
-      inputPin.push(pin);
-
-      // remove duplicates
-      inputPin = inputPin.filter(function (c, index) {
-        return inputPin.indexOf(c) === index;
-      });
+      inputPin.add(pin);
 
       return result;
     } else if (mode === this.OUTPUT) {
       /* set as OUTPUT */
-      var result = cc.gpio_config(gpioPin, this.OUTPUT);
+      const result = cc.gpio_config(gpioPin, this.OUTPUT);
       if (init) {
         cc.gpio_write(gpioPin, init);
       } else {
         cc.gpio_write(gpioPin, this.LOW); /* initial state is OFF */
       }
       // track all output pins
-      outputPin.push(pin);
-
-      // remove duplicates
-      outputPin = outputPin.filter(function (c, index) {
-        return outputPin.indexOf(c) === index;
-      });
+      outputPin.add(pin);
 
       return result;
     } else {
@@ -247,8 +270,8 @@ class Rpi {
     }
   }
 
-  gpio_close(pin) {
-    var gpioPin = convertPin(pin);
+  gpio_close(pin: number) {
+    const gpioPin = convertPin(pin);
 
     if (!rpiSetup.gpiomem) {
       cc.gpio_enable_pud(gpioPin, this.PULL_OFF);
@@ -258,98 +281,69 @@ class Rpi {
     cc.gpio_config(gpioPin, this.INPUT);
     cc.gpio_enable_pud(gpioPin, this.PULL_OFF);
 
-    inputPin = inputPin.filter(function (item) {
-      return item !== pin;
-    });
-
-    outputPin = outputPin.filter(function (item) {
-      return item !== pin;
-    });
+    inputPin.delete(pin);
   }
 
-  gpio_enable_async_rising_pin_event(pin) {
+  gpio_enable_async_rising_pin_event(pin: number) {
     cc.gpio_enable_async_rising_event(convertPin(pin), 1);
   }
 
-  gpio_detect_input_pin_event(pin) {
-    return cc.gpio_detect_input_event(convertPin(pin));
+  gpio_detect_input_pin_event(pin: number) {
+    return cc.gpio_detect_input_event(convertPin(pin)) as number;
   }
 
-  gpio_reset_all_pin_events(pin) {
+  gpio_reset_all_pin_events(pin: number) {
     cc.gpio_reset_all_events(convertPin(pin));
   }
 
-  gpio_reset_pin_event(pin) {
+  gpio_reset_pin_event(pin: number) {
     cc.gpio_reset_event(convertPin(pin));
   }
 
-  gpio_write(pin, value) {
-    return cc.gpio_write(convertPin(pin), value);
+  gpio_write(pin: number, value: number) {
+    return cc.gpio_write(convertPin(pin), value) as number;
   }
 
-  gpio_read(pin) {
-    return cc.gpio_read(convertPin(pin));
+  gpio_read(pin: number) {
+    return cc.gpio_read(convertPin(pin)) as 0 | 1;
   }
 
-  gpio_enable_pud(pin, value) {
-    return cc.gpio_enable_pud(convertPin(pin), value);
+  gpio_enable_pud(pin: number, value: number) {
+    cc.gpio_enable_pud(convertPin(pin), value);
   }
 
-  gpio_watchPin(edge, cb, pin, td) {
+  gpio_watchPin(
+    pin: number,
+    cb: WatchCallback,
+    edge: InputEdge = "both",
+    td: number = 100
+  ) {
     /* check pin if valid */
-    if (cb) {
-      try {
-        this.gpio_read(pin);
-      } catch (e) {
-        throw new Error("invalid pin");
-      }
+    try {
+      this.gpio_read(pin);
+    } catch (e) {
+      throw new Error("invalid pin");
     }
 
     let on = false;
-
-    if (typeof edge === "function" && typeof cb === "number") {
-      td = cb;
-      cb = edge;
-      edge = null;
-    } else if (typeof edge === "function" && cb === undefined) {
-      cb = edge;
-      edge = null;
-    } else if (
-      typeof edge !== "string" &&
-      typeof edge !== "number" &&
-      edge !== null
-    ) {
-      throw new Error("invalid edge argument");
-    } else if (
-      (typeof edge === "string" || typeof edge === "number") &&
-      typeof cb !== "function"
-    ) {
-      throw new Error("invalid callback argument");
-    }
-
     /* set internal pull-down resistor */
     // conflict with pull-up resistor from Paulo Castro 1/14/2022
     // need to validate with new RPI boards as well as with new RPI OS's
     //cc.gpio_enable_pud(convertPin(pin), this.PULL_DOWN);
 
-    if (!td) {
-      td = 100;
-    }
-
     function logic() {
       if (cc.gpio_read(convertPin(pin)) && !on) {
         on = true;
-        if (edge === 1 || edge === "re" || edge === "both" || edge === null) {
+        if (edge === 1 || edge === "both") {
           setImmediate(cb, true, pin);
         }
       } else if (!cc.gpio_read(convertPin(pin)) && on) {
         on = false;
-        if (edge === 0 || edge === "fe" || edge == "both" || edge === null) {
+        if (edge === 0 || edge == "both") {
           setImmediate(cb, false, pin);
         }
       }
     }
-
     /*cc.gpio_reset_all_events(convertPin(pin));
 	cc.gpio_enable_async_rising_event(convertPin(pin), 1);
 
@@ -371,18 +365,13 @@ class Rpi {
 		
 	}*/
 
-    let monitor = setInterval(logic, td);
-    let monData = { monitor: monitor, pin: pin };
-    watchData.push(monData);
+    clearInterval(watchData.get(pin));
+    watchData.set(pin, setInterval(logic, td));
   }
 
-  gpio_unwatchPin(pin) {
-    watchData.forEach((monData, index) => {
-      if (monData.pin === pin) {
-        clearInterval(monData.monitor);
-        watchData.splice(index, 1);
-      }
-    });
+  gpio_unwatchPin(pin: number) {
+    clearInterval(watchData.get(pin));
+    watchData.delete(pin);
   }
 
   /*
@@ -402,10 +391,10 @@ class Rpi {
     }
   }
 
-  pwmResetPin(pin) {
-    var gpioPin = convertPin(pin);
-    var v = outputPin.indexOf(gpioPin);
-    if (v === -1) {
+  pwmResetPin(pin: number) {
+    const gpioPin = convertPin(pin);
+    const v = outputPin.has(gpioPin);
+    if (!v) {
       cc.pwm_reset_pin(gpioPin);
       this.gpio_close(gpioPin);
     }
@@ -423,10 +412,10 @@ class Rpi {
    *    33         13
    *    35         19
    */
-  pwmSetup(pin, start, mode) {
-    var gpioPin = convertPin(pin);
+  pwmSetup(pin: number, start: boolean, mode?: boolean) {
+    const gpioPin = convertPin(pin);
 
-    check_sys_gpio(gpioPin);
+    check_sys_gpio(gpioPin, pin);
 
     /* true - enable pwm, false - disable */
     if (arguments[1] === undefined && start === undefined) {
@@ -442,15 +431,15 @@ class Rpi {
     cc.pwm_enable(gpioPin, Number(start));
   }
 
-  pwmSetClockDivider(divider) {
+  pwmSetClockDivider(divider: number) {
     return cc.pwm_set_clock_freq(divider);
   }
 
-  pwmSetRange(pin, range) {
+  pwmSetRange(pin: number, range: number) {
     return cc.pwm_set_range(convertPin(pin), range);
   }
 
-  pwmSetData(pin, data) {
+  pwmSetData(pin: number, data: number) {
     return cc.pwm_set_data(convertPin(pin), data);
   }
 
@@ -464,12 +453,12 @@ class Rpi {
       throw new Error("i2c peripheral access conflict");
     }
     /* I2C requires /dev/mem */
-    this.init(1);
+    rpiSetup.initialized = true;
     rpiSetup.initI2c = true;
     return cc.i2c_start();
   }
 
-  i2cInit(pinSet) {
+  i2cInit(pinSet: i2cPinSet) {
     if (rpiSetup.initialized && rpiSetup.gpiomem) {
       rpiModeConflict();
       rpiSetup.gpiomem = false;
@@ -486,19 +475,19 @@ class Rpi {
     }
   }
 
-  i2cSetSlaveAddress(addr) {
-    return cc.i2c_select_slave(addr);
+  i2cSetSlaveAddress(addr: number) {
+    cc.i2c_select_slave(addr);
   }
 
-  i2cSetClockDivider(divider) {
+  i2cSetClockDivider(divider: number) {
     cc.i2c_set_clock_freq(divider);
   }
 
-  i2cSetBaudRate(baud) {
+  i2cSetBaudRate(baud: number) {
     return cc.i2c_data_transfer_speed(baud);
   }
 
-  i2cRead(buf, len) {
+  i2cRead(buf: Buffer, len: number) {
     if (len === undefined) len = buf.length;
 
     if (len > buf.length) throw new Error("Insufficient buffer size");
@@ -510,7 +499,7 @@ class Rpi {
     return cc.i2c_byte_read();
   }
 
-  i2cWrite(buf, len) {
+  i2cWrite(buf: Buffer, len: number) {
     if (len === undefined) len = buf.length;
 
     if (len > buf.length) throw new Error("Insufficient buffer size");
@@ -544,15 +533,15 @@ class Rpi {
     return cc.spi_start();
   }
 
-  spiChipSelect(cs) {
+  spiChipSelect(cs: number) {
     cc.spi_chip_select(cs);
   }
 
-  spiSetCSPolarity(cs, active) {
+  spiSetCSPolarity(cs: 0 | 1 | 2, active: 0 | 1) {
     cc.spi_set_chip_select_polarity(cs, active);
   }
 
-  spiSetClockDivider(divider) {
+  spiSetClockDivider(divider: number) {
     if (divider % 2 !== 0 || divider < 0 || divider > 65536)
       throw new Error(
         "Clock divider must be an even number between 0 and 65536"
@@ -561,19 +550,19 @@ class Rpi {
     cc.spi_set_clock_freq(divider);
   }
 
-  spiSetDataMode(mode) {
+  spiSetDataMode(mode: SpiDataMode) {
     cc.spi_set_data_mode(mode);
   }
 
-  spiTransfer(wbuf, rbuf, len) {
+  spiTransfer(wbuf: Buffer, rbuf: Buffer, len: number) {
     cc.spi_data_transfer(wbuf, rbuf, len);
   }
 
-  spiWrite(wbuf, len) {
+  spiWrite(wbuf: Buffer, len: number) {
     cc.spi_write(wbuf, len);
   }
 
-  spiRead(rbuf, len) {
+  spiRead(rbuf: Buffer, len: number) {
     cc.spi_read(rbuf, len);
   }
 
@@ -585,17 +574,18 @@ class Rpi {
    * time delay methods
    */
   // delay in milliseconds
-  mswait(ms) {
+  mswait(ms: number) {
     cc.mswait(ms);
   }
   // delay in microseconds
-  uswait(us) {
+  uswait(us: number) {
     cc.uswait(us);
   }
 } // end of Rpi class
 
-module.exports = new Rpi();
+export const rpi = new Rpi();
+module.exports = rpi;
 
-process.on("exit", function (code) {
+process.on("exit", () => {
   cc.rpi_close();
 });
