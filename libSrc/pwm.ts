@@ -4,10 +4,10 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-import { rpi } from "./rpi";
+import rpi from "./rpi.js";
 
-let Freq = 1;
-let pwmObject = 0;
+export let Freq = 1;
+export let pwmObject = 0;
 
 class PWM {
   _T: any;
@@ -160,4 +160,4 @@ class PWM {
   }
 } // end of PWM class
 
-module.exports = PWM;
+export default PWM;

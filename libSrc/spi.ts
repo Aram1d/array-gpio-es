@@ -4,7 +4,7 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-import { rpi, SpiDataMode } from "./rpi";
+import rpi, { SpiDataMode } from "./rpi.js";
 
 /*
  * spi class
@@ -94,6 +94,6 @@ class SPI {
   end() {
     rpi.spiEnd();
   }
-} // end of SPI class
+}
 
-module.exports = SPI;
+export default SPI;

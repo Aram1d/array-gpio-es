@@ -4,7 +4,7 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-import { rpi } from "./rpi";
+import rpi from "./rpi.js";
 
 export type GpioBit = 0 | 1 | boolean;
 export type StateCallback = (state: GpioBit) => void;

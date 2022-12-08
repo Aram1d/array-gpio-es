@@ -8,7 +8,7 @@
 import fs, { Stats } from "fs";
 import os from "os";
 import bindings from "bindings";
-import { GpioBit } from "./gpio-output";
+import { GpioBit } from "./gpio-output.js";
 const cc = bindings("node_rpi");
 
 export type RpiInitAccess = 0 | 1;
@@ -18,7 +18,7 @@ export type i2cPinSet = 0 | 1;
 export type InputEdge = 0 | 1 | "both";
 export type WatchCallback = (state: GpioBit, pin: number) => void;
 
-const EventEmitter = require("events");
+import EventEmitter from "events";
 class StateEmitter extends EventEmitter {}
 const emitter = (exports.emitter = new StateEmitter());
 emitter.setMaxListeners(2);
@@ -412,19 +412,10 @@ class Rpi {
    *    33         13
    *    35         19
    */
-  pwmSetup(pin: number, start: boolean, mode?: boolean) {
+  pwmSetup(pin: number, start: boolean = false, mode: boolean = true) {
     const gpioPin = convertPin(pin);
 
     check_sys_gpio(gpioPin, pin);
-
-    /* true - enable pwm, false - disable */
-    if (arguments[1] === undefined && start === undefined) {
-      start = false;
-    }
-    /* true for m/s mode, false for balanced mode */
-    if (arguments[2] === undefined && mode === undefined) {
-      mode = true;
-    }
 
     cc.pwm_set_pin(gpioPin);
     cc.pwm_set_mode(gpioPin, Number(mode));
@@ -583,8 +574,7 @@ class Rpi {
   }
 } // end of Rpi class
 
-export const rpi = new Rpi();
-module.exports = rpi;
+export default new Rpi();
 
 process.on("exit", () => {
   cc.rpi_close();

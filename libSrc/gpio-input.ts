@@ -4,8 +4,8 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-import { InputEdge, rpi, WatchCallback } from "./rpi.js";
-import { StateCallback } from "./gpio-output";
+import rpi, { InputEdge, WatchCallback } from "./rpi.js";
+import { StateCallback } from "./gpio-output.js";
 
 export type InResState = "pu" | "pd" | "none";
 
@@ -69,7 +69,7 @@ class GpioInput {
     if (![undefined, "function"].includes(typeof cb))
       throw new Error("invalid callback argument");
 
-    let s = rpi.gpio_read(this.pin);
+    const s = rpi.gpio_read(this.pin);
     return cb ? setImmediate(cb, s) : s;
   }
 

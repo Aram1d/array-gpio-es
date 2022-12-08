@@ -1,11 +1,13 @@
 {
   "name": "array-gpio",
-  "version": "1.5.8",
+  "version": "2.0.0",
   "description": "array-gpio is low-level javascript library for Raspberry Pi using direct register control.",
-  "main": "index.js",
+  "main": "./lib/array-gpio.js",
+  "type": "module",
   "cpu": [
     "arm",
-    "arm64"
+    "arm64",
+    "x64"
   ],
   "os": [
     "linux"
@@ -20,10 +22,15 @@
   },
   "devDependencies": {
     "@types/bindings": "^1.5.1",
+    "@typescript-eslint/eslint-plugin": "^5.46.0",
+    "@typescript-eslint/parser": "^5.46.0",
     "colors": "^1.1.2",
+    "eslint": "^8.29.0",
+    "eslint-plugin-import": "^2.26.0",
     "mocha": "^8.0.1",
     "nyc": "^15.1.0",
-    "sinon": "^9.0.2"
+    "sinon": "^9.0.2",
+    "typescript": "^4.9.4"
   },
   "license": "MIT",
   "directories": {},

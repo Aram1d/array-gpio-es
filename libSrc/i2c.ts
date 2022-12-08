@@ -5,9 +5,8 @@
  * MIT Licensed
  */
 
-import { i2cPinSet } from "./rpi";
+import rpi, { i2cPinSet } from "./rpi.js";
 
-const rpi = require("./rpi.ts");
 let test = false;
 
 /*
@@ -18,7 +17,7 @@ class I2C {
   	this.begin();
 }*/
 
-  constructor(pinSet: i2cPinSet) {
+  constructor(pinSet?: i2cPinSet) {
     if (!pinSet) {
       this.startI2C(1);
     } else {
@@ -90,6 +89,6 @@ class I2C {
   end() {
     rpi.i2cEnd();
   }
-} // end of I2C class
+}
 
-module.exports = I2C;
+export default I2C;

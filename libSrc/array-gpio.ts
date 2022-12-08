@@ -4,19 +4,18 @@
  * Copyright(c) 2017 Ed Alegrid
  * MIT Licensed
  */
-import { i2cPinSet, InputEdge, WatchCallback } from "./rpi";
+
+import rpi, { i2cPinSet, InputEdge, WatchCallback } from "./rpi.js";
+import I2C from "./i2c.js";
+import SPI from "./spi.js";
+import PWM, { Freq, pwmObject as PwmObject } from "./pwm.js";
+import GpioInput, { InResState } from "./gpio-input.js";
+import GpioOutput from "./gpio-output.js";
 
 import EventEmitter from "events";
 class StateEmitter extends EventEmitter {}
 const emitter = (exports.emitter = new StateEmitter());
 emitter.setMaxListeners(2);
-
-const rpi = require("./rpi.js");
-const I2C = require("./i2c.js");
-const SPI = require("./spi.js");
-const PWM = require("./pwm.js");
-import GpioInput, { InResState } from "./gpio-input.js";
-import GpioOutput from "./gpio-output.js";
 
 const pwr3 = [1, 17] as const;
 const pwr5 = [2, 4];
@@ -52,8 +51,7 @@ let debugState = false,
   debugStateAdvanced = false;
 
 /* PWM variables */
-let pwmObjectTotal = 0,
-  pwmObject = 0;
+let pwmObjectTotal = 0;
 
 const pwmPin = { c1: new Set<number>(), c2: new Set<number>() };
 
@@ -301,9 +299,6 @@ class ArrayGpio {
     /* create pwm object using validated arguments */
     const pwm = new PWM(pin, freq, t, pw);
 
-    /* track Freq from pwm.ts */
-    const Freq = require("./pwm.js").Freq;
-
     let res: string = "";
     /* PWM setup reference console output */
     if (Freq === 10) {
@@ -323,12 +318,10 @@ class ArrayGpio {
       );
     }
 
-    /* get the pwmObject from pwm.ts */
-    pwmObject = require("./pwm.js").pwmObject;
     /* check for more than 1 peripheral and channel pairs */
     setImmediate(function () {
       pwmObjectTotal += 1;
-      if (pwmObject === pwmObjectTotal && pwmObject > 1) {
+      if (PwmObject === pwmObjectTotal && PwmObject > 1) {
         console.log(
           "\nArray-gpio has detected you are using more than 1 PWM peripheral." +
             "\nAll PWM peripherals are using 1 clock oscillator.\nClock frequency is set to " +
@@ -339,7 +332,7 @@ class ArrayGpio {
       /* pwm pin channel check */
       setImmediate(() => {
         [[...pwmPin.c1], [...pwmPin.c2]].forEach((pins) => {
-          if (pins.length > 1 && pwmObject > 1 && pins[1] === pin) {
+          if (pins.length > 1 && PwmObject > 1 && pins[1] === pin) {
             console.log(`Paired PWM peripherals (pin ${pins}) detected.`);
             console.log("Range and data will be same for both peripherals.\n");
           }
@@ -356,7 +349,7 @@ class ArrayGpio {
 
  ********************************************/
 
-  setI2C(pin: i2cPinSet) {
+  setI2C(pin?: i2cPinSet) {
     return new I2C(pin);
   }
 
