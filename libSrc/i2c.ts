@@ -11,12 +11,11 @@ let test = false;
 
 /*
  * i2c class
+ * has to be instantiated with on of the pinSet:
+ * value 1 (GPIO 02/pin 03 SDA1, GPIO 03/pin 05 SCL1)
+ * value 0 (GPIO 00/pin 27 SDA0, GPIO 01/pin 28 SCL0)
  */
 class I2C {
-  /*constructor (){
-  	this.begin();
-}*/
-
   constructor(pinSet?: i2cPinSet) {
     if (!pinSet) {
       this.startI2C(1);
@@ -61,16 +60,8 @@ class I2C {
   }
 
   /* returns 1 if successful, otherwise returns 0*/
-  setSlaveAddress(value: number) {
-    if (test) return;
-    return rpi.i2cSetSlaveAddress(value);
-  }
-
-  /* returns 1 if successful, otherwise returns 0*/
   selectSlave(value: number) {
-    if (test) {
-      return;
-    }
+    if (test) return;
     return rpi.i2cSetSlaveAddress(value);
   }
 

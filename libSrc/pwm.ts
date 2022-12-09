@@ -158,6 +158,6 @@ class PWM {
     rpi.pwmReset();
     //rpi.pwmResetPin(this._pin);
   }
-} // end of PWM class
+}
 
 export default PWM;

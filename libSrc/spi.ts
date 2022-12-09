@@ -6,6 +6,9 @@
  */
 import rpi, { SpiDataMode } from "./rpi.js";
 
+const clock1 = 250000000;
+const clock3 = 400000000;
+
 /*
  * spi class
  */
@@ -31,24 +34,7 @@ class SPI {
   }
 
   /* 250MHz on RPi1 and RPi2, and 400MHz on RPi3 */
-  setClockFreq(div: number) {
-    const clock1 = 250000000;
-    const clock3 = 400000000;
-
-    const boardRev = rpi.spiGetBoardRev();
-    const freq =
-      boardRev === 8322 ? Math.round(clock3 / div) : Math.round(clock1 / div);
-    const Freq = freq / 1000;
-
-    console.log("SPI clock freq: " + Freq + " kHz (div " + div + ")");
-
-    rpi.spiSetClockDivider(div);
-  }
-
-  /* 250MHz on RPi1 and RPi2, and 400MHz on RPi3 */
   setClock(div: number) {
-    const clock1 = 250000000;
-    const clock3 = 400000000;
 
     const boardRev = rpi.spiGetBoardRev();
     const freq =
@@ -67,7 +53,7 @@ class SPI {
     rpi.spiChipSelect(cs);
   }
 
-  /* transfer data bytes to/from periphetal registers using node buffer objects */
+  /* transfer data bytes to/from peripheral registers using node buffer objects */
   transfer(wbuf: Buffer, rbuf: Buffer, len: number) {
     if (this.isTest) {
       return;
@@ -75,7 +61,7 @@ class SPI {
     rpi.spiTransfer(wbuf, rbuf, len);
   }
 
-  /* transfer data bytes to periphetal registers using node buffer objects */
+  /* transfer data bytes to peripheral registers using node buffer objects */
   write(wbuf: Buffer, len: number) {
     if (this.isTest) {
       return;
@@ -83,7 +69,7 @@ class SPI {
     rpi.spiWrite(wbuf, len);
   }
 
-  /* transfer data bytes from periphetal registers using node buffer objects */
+  /* transfer data bytes from peripheral registers using node buffer objects */
   read(rbuf: Buffer, len: number) {
     if (this.isTest) {
       return;

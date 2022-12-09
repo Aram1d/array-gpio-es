@@ -2,6 +2,7 @@
  * array-gpio
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 W. SUGNIAUX
  * MIT Licensed
  */
 
@@ -14,17 +15,17 @@ import GpioOutput from "./gpio-output.js";
 
 import EventEmitter from "events";
 class StateEmitter extends EventEmitter {}
-const emitter = (exports.emitter = new StateEmitter());
+export const emitter = new StateEmitter();
 emitter.setMaxListeners(2);
 
 const pwr3 = [1, 17] as const;
-const pwr5 = [2, 4];
-const uart = { txd: 8, rxd: 10 };
-const i2c = { sda: 3, scl: 5 };
+const pwr5 = [2, 4] as const;
+const uart = { txd: 8, rxd: 10 } as const;
+const i2c = { sda: 3, scl: 5 } as const;
 const pwm = { pwm0: [12, 32] as const, pwm1: [33, 35] as const };
-const spi = { mosi: 19, miso: 21, sclk: 23, cs0: 24, cs1: 26 };
-const eprom = { sda: 27, scl: 28 };
-const ground = [6, 9, 14, 20, 25, 30, 34, 39];
+const spi = { mosi: 19, miso: 21, sclk: 23, cs0: 24, cs1: 26 } as const;
+const eprom = { sda: 27, scl: 28 } as const;
+const ground = [6, 9, 14, 20, 25, 30, 34, 39] as const;
 const gpio = [
   3, 5, 7, 8, 10, 11, 12, 13, 15, 16, 18, 19, 21, 22, 23, 24, 26, 27, 28, 29,
   31, 32, 33, 35, 36, 37, 38, 40,
@@ -87,11 +88,12 @@ class GpioGroup extends Array<GpioInput> {
   }
 }
 
-/****************************************
- *					*										*
- *	array-gpio class module		*
- *					*										*
- ****************************************/
+/*
+ *
+ *	Array-gpio class
+ *
+ *
+*/
 class ArrayGpio {
   in: typeof this.setInput;
   out: typeof this.setOutput;
@@ -103,14 +105,10 @@ class ArrayGpio {
   close() {
     rpi.lib_close();
   }
-
-  /********************************************
-
-		GPIO Methods
-
- ********************************************/
   /*
    * GPIO setInput method
+   * @param pin | pin[] | InputPinWithOption []
+   * @return GpioInput | GpioGroup (extended GpioInput[] )
    */
 
   setInput(
@@ -161,7 +159,9 @@ class ArrayGpio {
   }
 
   /*
-   * GPIO setOutput method property
+   * GPIO setOutput: use a GPIO pin as output
+   * @param take a pin, an array of pins or OutputObjectArg
+   * @return GpioOutput | GpioOutput[]
    */
   setOutput(first: OutputObjArg): void;
   setOutput(first: GpioPins, ...rest: GpioPins[]): void;
@@ -240,6 +240,7 @@ class ArrayGpio {
       try {
         rpi.gpio_open(x, 0);
         validPin.push(x);
+        rpi.gpio_close(x)
       } catch (e) {
         invalidPin.push(x);
       }
@@ -343,38 +344,21 @@ class ArrayGpio {
     return pwm;
   }
 
-  /********************************************
-
-		I2C Methods
-
- ********************************************/
-
   setI2C(pin?: i2cPinSet) {
     return new I2C(pin);
   }
-
-  /********************************************
-
-		SPI Methods
-
- ********************************************/
 
   setSPI() {
     return new SPI();
   }
 
-  /********************************************
 
-		Other Helper Methods
-
- ********************************************/
-
-  /* mswait (millisecond) method */
+  /* waiter with millisecond argument */
   mswait(ms: number) {
     rpi.mswait(ms);
   }
 
-  /* uswait (microsecond) method */
+  /* waiter with microsecond argument */
   uswait(us: number) {
     rpi.uswait(us);
   }

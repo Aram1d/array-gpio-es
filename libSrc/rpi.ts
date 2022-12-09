@@ -20,7 +20,7 @@ export type WatchCallback = (state: GpioBit, pin: number) => void;
 
 import EventEmitter from "events";
 class StateEmitter extends EventEmitter {}
-const emitter = (exports.emitter = new StateEmitter());
+export const emitter = new StateEmitter();
 emitter.setMaxListeners(2);
 
 let BoardRev: number;
@@ -204,7 +204,10 @@ class Rpi {
   RISING_EDGE = 0x2 as const;
   BOTH = 0x3 as const;
 
-  constructor() {}
+  constructor() {
+    if (rpi) return rpi;
+    return this;
+  }
 
   /*
    * rpi lib access methods
@@ -524,6 +527,13 @@ class Rpi {
     return cc.spi_start();
   }
 
+  /*
+   * SPI Chip select
+   * 0  (00) = Chip select 0
+   * 1  (01) = Chip select 1
+   * 2  (10) = Chip select 2
+   * 3  (11) = Reserved
+   * */
   spiChipSelect(cs: number) {
     cc.spi_chip_select(cs);
   }
@@ -541,6 +551,12 @@ class Rpi {
     cc.spi_set_clock_freq(divider);
   }
 
+  /*
+   *  * SPI Mode0 = 0,  CPOL = 0, CPHA = 0
+   * SPI Mode1 = 1,  CPOL = 0, CPHA = 1
+   * SPI Mode2 = 2,  CPOL = 1, CPHA = 0
+   * SPI Mode3 = 3,  CPOL = 1, CPHA = 1
+   */
   spiSetDataMode(mode: SpiDataMode) {
     cc.spi_set_data_mode(mode);
   }
@@ -574,7 +590,8 @@ class Rpi {
   }
 } // end of Rpi class
 
-export default new Rpi();
+const rpi = new Rpi();
+export default rpi;
 
 process.on("exit", () => {
   cc.rpi_close();
