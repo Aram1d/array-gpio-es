@@ -2,9 +2,12 @@
  * array-gpio/pwm.js
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
+
 import rpi from "./rpi.js";
+import { PwmPins } from "./types.js";
 
 export let Freq = 1;
 export let pwmObject = 0;
@@ -12,11 +15,11 @@ export let pwmObject = 0;
 class PWM {
   _T: any;
   _pw: any;
-  _pin: number;
+  _pin: PwmPins;
   _freq: number;
   _pwmStarted: boolean;
   _pinOnlySetup: boolean;
-  constructor(pin: number, freq: number, T: number, pw: number) {
+  constructor(pin: PwmPins, freq: number, T: number, pw: number) {
     /* track pwm object */
     pwmObject += 1;
     exports.pwmObject = pwmObject;

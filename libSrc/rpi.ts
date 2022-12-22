@@ -2,34 +2,47 @@
  * array-gpio/rpi.js
  *
  * Copyright(c) 2017 Ed Alegrid <ealegrid@gmail.com>
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  *
  */
 import fs, { Stats } from "fs";
 import os from "os";
 import bindings from "bindings";
-import { GpioBit } from "./gpio-output.js";
+import GpioOutput from "./gpio-output.js";
+import {
+  Edges,
+  GpioMode,
+  GpioPin,
+  GpioState,
+  i2cPinSet,
+  IntR,
+  PwmPins,
+  RpiInitAccess,
+  SpiDataMode,
+  WatchCallback,
+  Watcher,
+} from "./types.js";
+import GpioInput from "./gpio-input.js";
+import PinStateMap from "./pinStateMap.js";
+
 const cc = bindings("node_rpi");
 
-export type RpiInitAccess = 0 | 1;
-export type GpioOpenMode = 0 | 1;
-export type SpiDataMode = 0 | 1 | 2 | 3;
-export type i2cPinSet = 0 | 1;
-export type InputEdge = 0 | 1 | "both";
-export type WatchCallback = (state: GpioBit, pin: number) => void;
-
-import EventEmitter from "events";
-class StateEmitter extends EventEmitter {}
-export const emitter = new StateEmitter();
-emitter.setMaxListeners(2);
-
 let BoardRev: number;
-const inputPin = new Set<number>();
-const outputPin = new Set<number>();
-const watchData = new Map<number, NodeJS.Timer>();
-const rpiSetup = {
+export const inputPin = new Map<number, GpioInput>();
+export const outputPin = new Map<number, GpioOutput>();
+
+export const pinStateMap = new PinStateMap();
+
+export const watchData = new Map<number, Set<Watcher>>();
+export const rpiSetup: {
+  initialized: boolean;
+  access: RpiInitAccess;
+  initI2c: false | i2cPinSet;
+  initSpi: boolean;
+} = {
   initialized: false,
-  gpiomem: false,
+  access: RpiInitAccess.GPIOMEM,
   initI2c: false,
   initSpi: false,
 };
@@ -141,7 +154,7 @@ const pinMap = new Map([
 ]);
 
 /* Convert physical board pinout number to BCM pin numbering */
-function convertPin(pin: number) {
+function convertPin(pin: GpioPin) {
   const gpioNumber = pinMap.get(pin);
   if (gpioNumber === -1) throw new Error(`Pin ${pin} is not GPIO`);
   if (gpioNumber === undefined) throw new Error(`Pin ${pin} is invalid`);
@@ -176,13 +189,14 @@ function check_sys_gpio(gpioPin: number, pin: number) {
 function rpiModeConflict() {
   console.log("\n** Peripheral access conflict.");
   console.log(
-    "** I2C, SPI and PWM object creation takes precedence over GPIO object creation."
+    "** I2C, SPI and PWM object creation takes precedence over GPIO object creation.\n"
   );
   console.log(
     "** Try creating I2C/SPI/PWM objects before creating GPIO input/output objects.\n"
   );
 }
 
+let rpi: Rpi | undefined;
 /***
  *  Rpi class
  *
@@ -190,135 +204,130 @@ function rpiModeConflict() {
  *  Incorrect use of this functions may cause hang-up/file corruptions
  */
 class Rpi {
-  LOW = 0x0 as const;
-  HIGH = 0x1 as const;
-
-  INPUT = 0x0 as const;
-  OUTPUT = 0x1 as const;
-
-  PULL_OFF = 0x0 as const;
-  PULL_DOWN = 0x1 as const;
-  PULL_UP = 0x2 as const;
-
-  FALLING_EDGE = 0x1 as const;
-  RISING_EDGE = 0x2 as const;
-  BOTH = 0x3 as const;
-
   constructor() {
-    if (rpi) return rpi;
-    return this;
+    if (!rpi) rpi = this;
+    return rpi;
   }
 
   /*
    * rpi lib access methods
    */
   lib_init(access: RpiInitAccess) {
-    /* reset pin store */
-    // BcmPin = {};
+    if (rpiSetup.initialized) cc.rpi_close();
     cc.rpi_init(access);
-
-    rpiSetup.gpiomem = access === 0; // true: rpi in dev/gpiomem for GPIO, false : rpi in dev/mem for i2c, spi, pwm
+    rpiSetup.access = access; // true: rpi in dev/gpiomem for GPIO, false : rpi in dev/mem for i2c, spi, pwm
     rpiSetup.initialized = true; // rpi must be initialized only once
   }
 
+  lib_switch_access(access: RpiInitAccess) {
+    if (!rpiSetup.initialized)
+      throw new Error("Initialize with lib_init instead");
+    if (rpiSetup.access !== access) {
+      cc.rpi_init(access);
+      rpiSetup.access = access;
+    }
+  }
+
   lib_close() {
+    outputPin.forEach((output) => output.close());
+    inputPin.forEach((input) => input.close());
     return cc.rpi_close();
   }
 
   /*
    * GPIO
    */
-  gpio_open(pin: number, mode: GpioOpenMode, init?: number) {
-    const gpioPin = convertPin(pin);
+
+  gpio_mk_input(
+    pin: GpioPin,
+    { intR, edge }: { intR: IntR; edge: Edges } = {
+      intR: IntR.OFF,
+      edge: Edges.BOTH,
+    }
+  ) {
     if (!rpiSetup.initialized) {
       this.lib_init(0);
     }
-
+    const gpioPin = convertPin(pin);
     check_sys_gpio(gpioPin, pin);
 
-    /* pin initial state */
-    cc.gpio_config(gpioPin, this.INPUT);
-    cc.gpio_enable_pud(gpioPin, this.PULL_OFF);
+    //reset pin in all cases
+    this.gpio_close(pin);
 
-    /* set as INPUT */
-    if (mode === this.INPUT) {
-      const result = cc.gpio_config(gpioPin, this.INPUT);
+    cc.gpio_config(gpioPin, GpioMode.INPUT);
+    cc.gpio_enable_pud(gpioPin, intR);
 
-      if (init) {
-        cc.gpio_enable_pud(gpioPin, init);
-      } else {
-        cc.gpio_enable_pud(
-          gpioPin,
-          this.PULL_OFF
-        ); /* initial PUD setup, none */
-      }
-      // track all input pins
-      inputPin.add(pin);
-
-      return result;
-    } else if (mode === this.OUTPUT) {
-      /* set as OUTPUT */
-      const result = cc.gpio_config(gpioPin, this.OUTPUT);
-      if (init) {
-        cc.gpio_write(gpioPin, init);
-      } else {
-        cc.gpio_write(gpioPin, this.LOW); /* initial state is OFF */
-      }
-      // track all output pins
-      outputPin.add(pin);
-
-      return result;
-    } else {
-      throw new Error("Unsupported mode " + mode);
-    }
+    const instance = new GpioInput(pin, { intR, edge });
+    inputPin.set(pin, instance);
+    pinStateMap.set(pin, GpioMode.INPUT);
+    return instance;
   }
 
-  gpio_close(pin: number) {
+  gpio_mk_output(pin: GpioPin, initState: GpioState = GpioState.LOW) {
+    if (!rpiSetup.initialized) {
+      this.lib_init(0);
+    }
+    const gpioPin = convertPin(pin);
+    check_sys_gpio(gpioPin, pin);
+
+    //reset pin in all cases
+    this.gpio_close(pin);
+
+    cc.gpio_config(gpioPin, GpioMode.OUTPUT);
+    cc.gpio_write(gpioPin, initState);
+
+    const instance = new GpioOutput(pin);
+    outputPin.set(pin, instance);
+    pinStateMap.set(pin, GpioMode.OUTPUT);
+    return instance;
+  }
+
+  gpio_close(pin: GpioPin) {
     const gpioPin = convertPin(pin);
 
-    if (!rpiSetup.gpiomem) {
-      cc.gpio_enable_pud(gpioPin, this.PULL_OFF);
+    if (rpiSetup.access !== RpiInitAccess.GPIOMEM) {
+      cc.gpio_enable_pud(gpioPin, IntR.OFF);
     }
 
     /* reset pin to input */
-    cc.gpio_config(gpioPin, this.INPUT);
-    cc.gpio_enable_pud(gpioPin, this.PULL_OFF);
+    cc.gpio_config(gpioPin, GpioMode.INPUT);
+    cc.gpio_enable_pud(gpioPin, IntR.OFF);
 
-    inputPin.delete(pin);
+    pinStateMap.set(pin, GpioMode.INPUT);
   }
 
-  gpio_enable_async_rising_pin_event(pin: number) {
+  gpio_enable_async_rising_pin_event(pin: GpioPin) {
     cc.gpio_enable_async_rising_event(convertPin(pin), 1);
   }
 
-  gpio_detect_input_pin_event(pin: number) {
+  gpio_detect_input_pin_event(pin: GpioPin) {
     return cc.gpio_detect_input_event(convertPin(pin)) as number;
   }
 
-  gpio_reset_all_pin_events(pin: number) {
+  gpio_reset_all_pin_events(pin: GpioPin) {
     cc.gpio_reset_all_events(convertPin(pin));
   }
 
-  gpio_reset_pin_event(pin: number) {
+  gpio_reset_pin_event(pin: GpioPin) {
     cc.gpio_reset_event(convertPin(pin));
   }
 
-  gpio_write(pin: number, value: number) {
-    return cc.gpio_write(convertPin(pin), value) as number;
+  gpio_write(pin: GpioPin, value: GpioState) {
+    return cc.gpio_write(convertPin(pin), value) as GpioState;
   }
 
-  gpio_read(pin: number) {
-    return cc.gpio_read(convertPin(pin)) as 0 | 1;
+  gpio_read(pin: GpioPin) {
+    return cc.gpio_read(convertPin(pin)) as GpioState;
   }
 
-  gpio_enable_pud(pin: number, value: number) {
+  gpio_enable_pud(pin: GpioPin, value: IntR) {
     cc.gpio_enable_pud(convertPin(pin), value);
   }
 
   gpio_watchPin(
-    pin: number,
+    pin: GpioPin,
     cb: WatchCallback,
-    edge: InputEdge = "both",
+    edge: Edges = Edges.BOTH,
     td: number = 100
   ) {
     /* check pin if valid */
@@ -328,65 +337,55 @@ class Rpi {
       throw new Error("invalid pin");
     }
 
-    let on = false;
-    /* set internal pull-down resistor */
-    // conflict with pull-up resistor from Paulo Castro 1/14/2022
-    // need to validate with new RPI boards as well as with new RPI OS's
-    //cc.gpio_enable_pud(convertPin(pin), this.PULL_DOWN);
-
-    function logic() {
-      if (cc.gpio_read(convertPin(pin)) && !on) {
-        on = true;
-        if (edge === 1 || edge === "both") {
+    const logic = () => {
+      if (cc.gpio_read(convertPin(pin)) && !watcherObj.on) {
+        watcherObj.on = true;
+        if (edge === Edges.RISING_EDGE || edge === Edges.BOTH) {
           setImmediate(cb, true, pin);
         }
-      } else if (!cc.gpio_read(convertPin(pin)) && on) {
-        on = false;
-        if (edge === 0 || edge == "both") {
+      } else if (!cc.gpio_read(convertPin(pin)) && watcherObj.on) {
+        watcherObj.on = false;
+        if (edge === Edges.FALLING_EDGE || edge === Edges.BOTH) {
           setImmediate(cb, false, pin);
         }
       }
-    }
-    /*cc.gpio_reset_all_events(convertPin(pin));
-	cc.gpio_enable_async_rising_event(convertPin(pin), 1);
+    };
 
-	function logic () {
-		if(cc.gpio_detect_input_event(convertPin(pin)) && !on){
-			on = true;
-			if(edge === 1 || edge === 're' || edge === 'both' ||  edge === null ){
-				setImmediate(cb, true, pin);
-			}
-			cc.gpio_reset_event(convertPin(pin))
-		}
-		else if(!cc.gpio_detect_input_event(convertPin(pin)) && on){
-			on = false;
-			if(edge === 0 || edge === 'fe' || edge == 'both' || edge === null){  
-				setImmediate(cb, false, pin);
-			}
-			cc.gpio_reset_event(convertPin(pin))
-		}
-		
-	}*/
+    const watcherObj: Watcher = {
+      on: false,
+      logic,
+      timeout: setInterval(logic, td),
+      unWatch: () => {
+        clearInterval(watcherObj.timeout);
+        watchData.get(pin)?.delete(watcherObj);
+      },
+    };
 
-    clearInterval(watchData.get(pin));
-    watchData.set(pin, setInterval(logic, td));
+    const maybeWatcherSet = watchData.get(pin);
+    if (maybeWatcherSet) maybeWatcherSet.add(watcherObj);
+    else watchData.set(pin, new Set([watcherObj]));
+    return watcherObj.unWatch;
   }
 
   gpio_unwatchPin(pin: number) {
-    clearInterval(watchData.get(pin));
+    watchData.get(pin)?.forEach((watcher) => watcher.unWatch());
     watchData.delete(pin);
+  }
+
+  flushPins(pins: GpioPin[]) {
+    pins.forEach((pin) => outputPin.get(pin)?.close());
+    pins.forEach((pin) => inputPin.get(pin)?.close());
   }
 
   /*
    * PWM
    */
-  pwmInit() {
-    /* check if GPIO is already using the rpi library in gpiomem */
-    if (rpiSetup.initialized && rpiSetup.gpiomem) {
+  pwmInit(forceInit: boolean = false) {
+    /* PWM peripheral requires /dev/mem */
+    if (rpiSetup.initialized && rpiSetup.access === RpiInitAccess.GPIOMEM) {
       rpiModeConflict();
-      rpiSetup.gpiomem = false;
-      this.pwmReset();
-      throw new Error("pwm peripheral access conflict");
+      if (!forceInit) throw new Error("pwm peripheral access conflict");
+      this.lib_switch_access(RpiInitAccess.MEM);
     }
     /* PWM peripheral requires /dev/mem */
     if (!rpiSetup.initialized) {
@@ -394,12 +393,12 @@ class Rpi {
     }
   }
 
-  pwmResetPin(pin: number) {
+  pwmResetPin(pin: GpioPin) {
     const gpioPin = convertPin(pin);
     const v = outputPin.has(gpioPin);
     if (!v) {
       cc.pwm_reset_pin(gpioPin);
-      this.gpio_close(gpioPin);
+      this.gpio_close(pin);
     }
   }
 
@@ -415,10 +414,12 @@ class Rpi {
    *    33         13
    *    35         19
    */
-  pwmSetup(pin: number, start: boolean = false, mode: boolean = true) {
+  pwmSetup(pin: PwmPins, start: boolean = false, mode: boolean = true) {
     const gpioPin = convertPin(pin);
 
     check_sys_gpio(gpioPin, pin);
+
+    this.flushPins([pin]);
 
     cc.pwm_set_pin(gpioPin);
     cc.pwm_set_mode(gpioPin, Number(mode));
@@ -429,42 +430,63 @@ class Rpi {
     return cc.pwm_set_clock_freq(divider);
   }
 
-  pwmSetRange(pin: number, range: number) {
+  pwmSetRange(pin: GpioPin, range: number) {
     return cc.pwm_set_range(convertPin(pin), range);
   }
 
-  pwmSetData(pin: number, data: number) {
+  pwmSetData(pin: GpioPin, data: number) {
     return cc.pwm_set_data(convertPin(pin), data);
   }
 
   /*
    * I2C
    */
-  i2cBegin() {
-    if (rpiSetup.initialized && rpiSetup.gpiomem) {
-      rpiModeConflict();
-      rpiSetup.gpiomem = false;
-      throw new Error("i2c peripheral access conflict");
-    }
+  i2cBegin(forceInit: boolean = false) {
     /* I2C requires /dev/mem */
-    rpiSetup.initialized = true;
-    rpiSetup.initI2c = true;
-    return cc.i2c_start();
+    if (rpiSetup.initialized && rpiSetup.access === RpiInitAccess.GPIOMEM) {
+      rpiModeConflict();
+      if (!forceInit) throw new Error("i2c peripheral access conflict");
+      this.lib_switch_access(RpiInitAccess.MEM);
+    }
+    if (!rpiSetup.initialized) {
+      this.lib_init(1);
+    }
+
+    //flush required pins
+    this.flushPins([3, 5]);
+
+    const i2cStatus = cc.i2c_start();
+    if (i2cStatus) {
+      rpiSetup.initialized = true;
+      rpiSetup.initI2c = 1;
+    }
+    return i2cStatus;
   }
 
-  i2cInit(pinSet: i2cPinSet) {
-    if (rpiSetup.initialized && rpiSetup.gpiomem) {
-      rpiModeConflict();
-      rpiSetup.gpiomem = false;
-      throw new Error("i2c peripheral access conflict");
-    }
+  /*
+   * PinSets:
+   *  - 0 for pin27/Gpio00 SDA0 & pin28/gpio01 SCL0
+   *  - 1 for pin03/Gpio02 SDA1 & pin05/gpio03 SCL1
+   * */
+  i2cInit(pinSet: i2cPinSet, forceInit: boolean = false) {
     /* I2C requires /dev/mem */
+    if (rpiSetup.initialized && rpiSetup.access === RpiInitAccess.GPIOMEM) {
+      rpiModeConflict();
+      if (!forceInit) throw new Error("i2c peripheral access conflict");
+      this.lib_switch_access(RpiInitAccess.MEM);
+    }
+
+    const requiredPins: GpioPin[] = pinSet === 0 ? [27, 28] : [3, 5];
+    this.flushPins(requiredPins);
+    requiredPins.forEach((p) => pinStateMap.set(p, GpioMode.ALT));
+
     if (!rpiSetup.initialized) {
-      rpiSetup.initI2c = true;
+      this.lib_init(1);
+      rpiSetup.initI2c = pinSet;
       if (pinSet === 0) {
-        return cc.i2c_init(0); // use SDA0 and SCL0 pins
+        return cc.i2c_init(0) as number; // use SDA0 and SCL0 pins
       } else if (pinSet === 1) {
-        return cc.i2c_init(1); // use SDA1 and SCL1 pins
+        return cc.i2c_init(1) as number; // use SDA1 and SCL1 pins
       }
     }
   }
@@ -481,12 +503,9 @@ class Rpi {
     return cc.i2c_data_transfer_speed(baud);
   }
 
-  i2cRead(buf: Buffer, len: number) {
-    if (len === undefined) len = buf.length;
-
-    if (len > buf.length) throw new Error("Insufficient buffer size");
-
-    return cc.i2c_read(buf, len);
+  i2cRead(buf: Buffer, len?: number) {
+    if (len && len > buf.length) throw new Error("Insufficient buffer size");
+    return cc.i2c_read(buf, len ?? buf.length);
   }
 
   i2cByteRead() {
@@ -494,15 +513,13 @@ class Rpi {
   }
 
   i2cWrite(buf: Buffer, len: number) {
-    if (len === undefined) len = buf.length;
-
-    if (len > buf.length) throw new Error("Insufficient buffer size");
-
-    return cc.i2c_write(buf, len);
+    if (len && len > buf.length) throw new Error("Insufficient buffer size");
+    return cc.i2c_write(buf, len ?? buf.length);
   }
 
   i2cEnd() {
     cc.i2c_stop();
+    rpiSetup.initI2c = false;
   }
 
   /*
@@ -512,17 +529,21 @@ class Rpi {
     return BoardRev;
   }
 
-  spiBegin() {
-    if (rpiSetup.initialized && rpiSetup.gpiomem) {
+  spiBegin(forceInit: boolean = false) {
+    /* SPI requires /dev/mem */
+    if (rpiSetup.initialized && rpiSetup.access === RpiInitAccess.GPIOMEM) {
       rpiModeConflict();
-      rpiSetup.gpiomem = false;
-      throw new Error("spi peripheral access conflict");
+      if (!forceInit) throw new Error("spi peripheral access conflict");
+      this.lib_switch_access(RpiInitAccess.MEM);
     }
 
-    /* SPI requires /dev/mem */
     if (!rpiSetup.initialized) {
       this.lib_init(1);
     }
+
+    const requiredPins: GpioPin[] = [19, 21, 24, 26];
+    this.flushPins(requiredPins);
+    requiredPins.forEach((p) => pinStateMap.set(p, GpioMode.ALT));
     rpiSetup.initSpi = true;
     return cc.spi_start();
   }
@@ -575,6 +596,9 @@ class Rpi {
 
   spiEnd() {
     cc.spi_stop();
+    const requiredPins: GpioPin[] = [19, 21, 24, 26];
+    requiredPins.forEach((p) => pinStateMap.set(p, GpioMode.INPUT));
+    rpiSetup.initSpi = false;
   }
 
   /*
@@ -590,8 +614,7 @@ class Rpi {
   }
 } // end of Rpi class
 
-const rpi = new Rpi();
-export default rpi;
+export default new Rpi();
 
 process.on("exit", () => {
   cc.rpi_close();

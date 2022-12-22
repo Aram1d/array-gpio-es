@@ -3,3 +3,5 @@ node_modules/
 coverage/
 m2m_log/
 .vscode/
+lib
+build

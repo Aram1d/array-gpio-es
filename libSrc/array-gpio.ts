@@ -2,18 +2,48 @@
  * array-gpio
  *
  * Copyright(c) 2017 Ed Alegrid
- * Copyright(c) 2022 W. SUGNIAUX
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
 
-import rpi, { i2cPinSet, InputEdge, WatchCallback } from "./rpi.js";
+import rpi, { inputPin, pinStateMap } from "./rpi.js";
 import I2C from "./i2c.js";
 import SPI from "./spi.js";
-import PWM, { Freq, pwmObject as PwmObject } from "./pwm.js";
-import GpioInput, { InResState } from "./gpio-input.js";
+import PWM from "./pwm.js";
+import pwm, { Freq, pwmObject as PwmObject } from "./pwm.js";
+import GpioInput from "./gpio-input.js";
 import GpioOutput from "./gpio-output.js";
-
+import {
+  Edges,
+  gpio,
+  GpioMode,
+  GpioPin,
+  GpioState,
+  i2cPinSet,
+  IntR,
+  PwmPins,
+  StateCallback,
+  WatchCallback,
+} from "./types.js";
 import EventEmitter from "events";
+
+export {
+  Edges,
+  gpio,
+  GpioInput,
+  GpioOutput,
+  StateCallback,
+  GpioMode,
+  GpioPin,
+  GpioState,
+  IntR,
+  PwmPins,
+  I2C,
+  SPI,
+  PWM,
+  WatchCallback,
+};
+
 class StateEmitter extends EventEmitter {}
 export const emitter = new StateEmitter();
 emitter.setMaxListeners(2);
@@ -22,30 +52,34 @@ const pwr3 = [1, 17] as const;
 const pwr5 = [2, 4] as const;
 const uart = { txd: 8, rxd: 10 } as const;
 const i2c = { sda: 3, scl: 5 } as const;
-const pwm = { pwm0: [12, 32] as const, pwm1: [33, 35] as const };
+
 const spi = { mosi: 19, miso: 21, sclk: 23, cs0: 24, cs1: 26 } as const;
 const eprom = { sda: 27, scl: 28 } as const;
 const ground = [6, 9, 14, 20, 25, 30, 34, 39] as const;
-const gpio = [
-  3, 5, 7, 8, 10, 11, 12, 13, 15, 16, 18, 19, 21, 22, 23, 24, 26, 27, 28, 29,
-  31, 32, 33, 35, 36, 37, 38, 40,
-] as const;
 
-export type PwmPins = typeof pwm.pwm0[number] | typeof pwm.pwm1[number];
-export type GpioPins = typeof gpio[number];
 export type AllowedFreq = 1 | 10 | 100 | 1000;
 
 type InputOptions = {
-  index: "pin" | "inc";
-  event: boolean;
+  index?: "pin" | "inc";
+  edge?: Edges;
+  intR?: IntR;
+  event?: boolean;
 };
 type InputPinWithOption = {
-  pin: GpioPins;
-  edge: InputEdge;
-  intR: InResState;
+  pin: GpioPin;
+  edge?: Edges;
+  intR?: IntR;
 };
 
-type OutputObjArg = { pins: GpioPins[]; index?: "pin" | "inc" };
+type OutputOptions = {
+  index: "pin" | "inc";
+  defaultInitState: GpioState;
+};
+
+type OutputPinWithOption = {
+  pin: GpioPin;
+  initState?: GpioState;
+};
 
 /* debug mode variables */
 let debugState = false,
@@ -77,7 +111,7 @@ function endTime(start: Date, m: 0 | 1) {
 }
 
 class GpioGroup extends Array<GpioInput> {
-  watchInputs(cb: WatchCallback, edge?: InputEdge, td?: number) {
+  watchInputs(cb: WatchCallback, edge?: Edges, td?: number) {
     this.forEach(({ pin }) => rpi.gpio_watchPin(pin, cb, edge, td));
   }
   unwatchInputs() {
@@ -93,7 +127,7 @@ class GpioGroup extends Array<GpioInput> {
  *	Array-gpio class
  *
  *
-*/
+ */
 class ArrayGpio {
   in: typeof this.setInput;
   out: typeof this.setOutput;
@@ -111,18 +145,41 @@ class ArrayGpio {
    * @return GpioInput | GpioGroup (extended GpioInput[] )
    */
 
+  setInput(pins: GpioPin, inputOptions?: Partial<InputOptions>): GpioInput;
   setInput(
-    pins: GpioPins | (GpioPins | InputPinWithOption)[],
-    inputOptions: InputOptions
+    pins: InputPinWithOption,
+    argsInputOptions?: Partial<InputOptions>
+  ): GpioInput;
+  setInput(
+    pins: (GpioPin | InputPinWithOption)[],
+    argsInputOptions?: InputOptions
+  ): GpioGroup;
+  setInput(
+    pins: GpioPin | InputPinWithOption | (GpioPin | InputPinWithOption)[],
+    argsInputOptions: InputOptions
   ) {
+    const inputOptions: Required<InputOptions> = {
+      index: "inc",
+      event: false,
+      edge: Edges.BOTH,
+      intR: IntR.OFF,
+      ...argsInputOptions,
+    };
+
     const begin = startTime();
     const pinsArray = Array.isArray(pins) ? pins : [pins];
 
-    const pinMap = new Map<GpioPins, Omit<InputPinWithOption, "pin">>(
+    const pinMap = new Map<GpioPin, Omit<Required<InputPinWithOption>, "pin">>(
       pinsArray.map((pin) =>
         typeof pin === "number"
-          ? [pin, { edge: "both", intR: "none" }]
-          : [pin.pin, { edge: pin.edge, intR: pin.intR }]
+          ? [pin, { edge: inputOptions.edge, intR: inputOptions.intR }]
+          : [
+              pin?.pin,
+              {
+                edge: pin?.edge ?? inputOptions.edge,
+                intR: pin?.intR ?? inputOptions.intR,
+              },
+            ]
       )
     );
 
@@ -130,8 +187,10 @@ class ArrayGpio {
       if (!gpio.includes(pin)) {
         throw new Error(`Gpio pin must be one of ${gpio.join(", ")}`);
       }
+      if (pinStateMap.get(pin) === GpioMode.ALT)
+        throw new Error(`Pin ${pin} is actually used in alt mode (I2C, SPI).`);
       try {
-        rpi.gpio_open(pin, 0);
+        rpi.gpio_mk_input(pin, pinOptions);
       } catch (e) {
         invalidPinError(pin);
       }
@@ -141,18 +200,22 @@ class ArrayGpio {
 
     pinMap.forEach((pinOptions, pin) => {
       const index = inputOptions.index === "pin" ? pin : inputPins.length;
-      inputPins[index] = new GpioInput(index, pin, pinOptions);
+      inputPins[index] = new GpioInput(pin, pinOptions);
     });
 
     if (inputPins.length < 2)
-      console.log(`GPIO input pin: ${inputPins[0]} ${endTime(begin, 1)}`);
+      console.log(`GPIO input pin: ${inputPins[0].pin} ${endTime(begin, 1)}`);
     else if (inputOptions.index === "pin")
       console.log(
-        `GPIO input pin: ${inputPins} indexedBy: pin ${endTime(begin, 1)}`
+        `GPIO input pin: ${inputPins
+          .map((p) => p.pin)
+          .join(", ")} indexedBy: pin ${endTime(begin, 1)}`
       );
     else
       console.log(
-        `GPIO output pin: ${inputPins} indexedBy: 0~n ${endTime(begin, 1)}`
+        `GPIO output pin: ${inputPins
+          .map((p) => p.pin)
+          .join(", ")} indexedBy: 0~n ${endTime(begin, 1)}`
       );
 
     return inputPins.length > 1 ? inputPins : inputPins[0];
@@ -163,93 +226,96 @@ class ArrayGpio {
    * @param take a pin, an array of pins or OutputObjectArg
    * @return GpioOutput | GpioOutput[]
    */
-  setOutput(first: OutputObjArg): void;
-  setOutput(first: GpioPins, ...rest: GpioPins[]): void;
-  setOutput(first: GpioPins | OutputObjArg, ...rest: GpioPins[]) {
+  setOutput(pins: GpioPin, outputOptions?: Partial<OutputOptions>): GpioOutput;
+  setOutput(
+    pins: OutputPinWithOption,
+    argsOutputOptions?: Partial<OutputOptions>
+  ): GpioOutput;
+  setOutput(
+    pins: (GpioPin | OutputPinWithOption)[],
+    argsOutputOptions?: Partial<OutputOptions>
+  ): GpioOutput[];
+  setOutput(
+    pins: GpioPin | OutputPinWithOption | (GpioPin | OutputPinWithOption)[],
+    argsOutputOptions: Partial<OutputOptions> = {
+      index: "inc",
+      defaultInitState: GpioState.LOW,
+    }
+  ) {
+    const outputOptions: OutputOptions = {
+      index: "inc",
+      defaultInitState: GpioState.LOW,
+      ...argsOutputOptions,
+    };
     const begin = startTime();
 
-    const pinSet = new Set<number>();
-    const options: { pinCheck: boolean; pinIndex: boolean } = {
-      pinCheck: false,
-      pinIndex: false,
-    };
+    const pinsArray = Array.isArray(pins) ? pins : [pins];
+    const pinMap = new Map<GpioPin, Omit<Required<OutputPinWithOption>, "pin">>(
+      pinsArray.map((pin) =>
+        typeof pin === "number"
+          ? [pin, { initState: outputOptions.defaultInitState }]
+          : [
+              pin?.pin,
+              { initState: pin?.initState ?? outputOptions.defaultInitState },
+            ]
+      )
+    );
 
-    if (!first) {
-      console.log("\nsetOutput() - empty argument!");
-      invalidPinError(first);
-    }
-
-    if (typeof first !== "number" && !Array.isArray(first?.pins)) {
-      console.log("\nsetOutput() - invalid argument!");
-      invalidPinError(first?.pins ?? first);
-    }
-
-    if (typeof first === "object") {
-      options.pinIndex = first.index === "pin";
-      if (typeof first.pins[0] !== "number") {
-        console.log("\nsetOutput({pins:[]}) - pins array is empty!");
-        invalidPinError();
-      }
-    }
-
-    const argPinArray =
-      typeof first === "number" ? [first, ...rest] : first.pins;
-    argPinArray.forEach((pin) => {
-      if (!Number.isInteger(pin))
-        throw new Error("pin number must be an integer");
+    pinMap.forEach((pinOptions, pin) => {
       if (!gpio.includes(pin))
         throw new Error(`Gpio pin must be one of ${gpio.join(", ")}`);
-    });
-
-    argPinArray.forEach((pin) => {
+      if (pinStateMap.get(pin) === GpioMode.ALT)
+        throw new Error(`Pin ${pin} is actually used in alt mode (I2C, SPI).`);
       try {
-        rpi.gpio_open(pin, 1);
-        pinSet.add(pin);
+        rpi.gpio_mk_output(pin, pinOptions.initState);
       } catch (e) {
-        console.log(`output pins [ ${Array.from(pinSet).join(" ")} ]`);
+        console.log(`output pins [ ${pinMap.entries()} ]`);
         invalidPinError(pin);
       }
     });
 
     const outputPins: GpioOutput[] = [];
-    Array.from(pinSet).forEach((pin, incIndex) => {
-      const index = options.pinIndex ? pin : incIndex;
-      outputPins[index] = new GpioOutput(index, pin);
+    pinMap.forEach((pinOption, pin) => {
+      const index = outputOptions.index === "pin" ? pin : outputPins.length;
+      outputPins[index] = new GpioOutput(pin);
     });
 
     if (outputPins.length < 2)
       console.log(`GPIO output pin: ${outputPins[0]} ${endTime(begin, 1)}`);
-    else if (options.pinIndex)
+    else if (outputOptions.index)
       console.log(
-        `GPIO output pin: ${outputPins} indexedBy: pin ${endTime(begin, 1)}`
+        `GPIO output pin: ${outputPins
+          .map((p) => p.pin)
+          .join(", ")} indexedBy: pin ${endTime(begin, 1)}`
       );
     else
       console.log(
-        `GPIO output pin: ${outputPins} indexedBy: 0~n ${endTime(begin, 1)}`
+        `GPIO output pin: ${outputPins
+          .map((p) => p.pin)
+          .join(", ")} indexedBy: 0~n ${endTime(begin, 1)}`
       );
 
     Object.preventExtensions(outputPins);
     return outputPins.length > 1 ? outputPins : outputPins[0];
   } // end of setOutput
 
-  /* validPin helper method */
-  validPin() {
-    const validPin = [],
-      invalidPin = [];
-    for (const x of gpio) {
-      try {
-        rpi.gpio_open(x, 0);
-        validPin.push(x);
-        rpi.gpio_close(x)
-      } catch (e) {
-        invalidPin.push(x);
+  watchAll(
+    cb: WatchCallback,
+    { edge, pollRate }: { edge?: Edges; pollRate?: number } = {
+      edge: Edges.BOTH,
+      pollRate: 100,
+    }
+  ) {
+    const cleanUpFns: (() => void)[] = [];
+    for (const [, gpioInput] of inputPin) {
+      if (gpioInput.isAvailable()) {
+        cleanUpFns.push(gpioInput.watch(cb, { edge, pollRate }));
       }
     }
-    console.log("GPIO valid pins", validPin);
-    console.log("GPIO invalid pins", invalidPin);
+    return () => cleanUpFns.forEach((fn) => fn());
   }
 
-  /* debug mode setup method for test */
+  /* debug mode setup method for legacyTest */
   debug(x: 0 | 1 | 2) {
     if ([0, 1, 2].includes(x)) {
       debugState = x > 0;
@@ -351,7 +417,6 @@ class ArrayGpio {
   setSPI() {
     return new SPI();
   }
-
 
   /* waiter with millisecond argument */
   mswait(ms: number) {

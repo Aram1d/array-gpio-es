@@ -2,12 +2,12 @@
  * array-gpio/i2c.js
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
 
-import rpi, { i2cPinSet } from "./rpi.js";
-
-let test = false;
+import rpi from "./rpi.js";
+import { i2cPinSet } from "./types.js";
 
 /*
  * i2c class
@@ -32,18 +32,12 @@ class I2C {
     return rpi.i2cInit(pinSet);
   }
 
-  test() {
-    test = true;
-  }
-
   setBaudRate(baud: number) {
-    if (test) return;
     rpi.i2cSetBaudRate(baud);
     console.log(`I2C data rate: ${baud / 1000} kHz`);
   }
 
   setTransferSpeed(baud: number) {
-    if (test) return;
     rpi.i2cSetBaudRate(baud);
     console.log(`I2C data rate: ${baud / 1000} kHz`);
   }
@@ -53,27 +47,21 @@ class I2C {
     const Freq = Math.round(freq / 1000);
 
     console.log(`I2C data rate: ${Freq} kHz (div ${div})`);
-    if (test) {
-      return;
-    }
     rpi.i2cSetClockDivider(div);
   }
 
   /* returns 1 if successful, otherwise returns 0*/
   selectSlave(value: number) {
-    if (test) return;
     return rpi.i2cSetSlaveAddress(value);
   }
 
   /* read data bytes from periphetal registers using node buffer objects */
   read(buf: Buffer, len: number) {
-    if (test) return;
-    rpi.i2cRead(buf, len);
+    return rpi.i2cRead(buf, len) as number;
   }
 
   /* write data bytes to periphetal registers using node buffer objects */
   write(buf: Buffer, len: number) {
-    if (test) return;
     rpi.i2cWrite(buf, len);
   }
 

@@ -1,10 +1,12 @@
 /*!
- * array-gpio/spi.js
+ * array-gpio/spi.ts
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
-import rpi, { SpiDataMode } from "./rpi.js";
+import rpi from "./rpi.js";
+import { SpiDataMode } from "./types.js";
 
 const clock1 = 250000000;
 const clock3 = 400000000;
@@ -14,19 +16,13 @@ const clock3 = 400000000;
  */
 
 class SPI {
-  isTest: boolean;
   constructor() {
     this.begin();
-    this.isTest = false;
   }
 
   /* returns 1 if successful, otherwise returns 0*/
   begin() {
     return rpi.spiBegin();
-  }
-
-  test() {
-    this.isTest = true;
   }
 
   setDataMode(mode: SpiDataMode) {
@@ -35,7 +31,6 @@ class SPI {
 
   /* 250MHz on RPi1 and RPi2, and 400MHz on RPi3 */
   setClock(div: number) {
-
     const boardRev = rpi.spiGetBoardRev();
     const freq =
       boardRev === 8322 ? Math.round(clock3 / div) : Math.round(clock1 / div);
@@ -55,25 +50,16 @@ class SPI {
 
   /* transfer data bytes to/from peripheral registers using node buffer objects */
   transfer(wbuf: Buffer, rbuf: Buffer, len: number) {
-    if (this.isTest) {
-      return;
-    }
     rpi.spiTransfer(wbuf, rbuf, len);
   }
 
   /* transfer data bytes to peripheral registers using node buffer objects */
   write(wbuf: Buffer, len: number) {
-    if (this.isTest) {
-      return;
-    }
     rpi.spiWrite(wbuf, len);
   }
 
   /* transfer data bytes from peripheral registers using node buffer objects */
   read(rbuf: Buffer, len: number) {
-    if (this.isTest) {
-      return;
-    }
     rpi.spiRead(rbuf, len);
   }
 

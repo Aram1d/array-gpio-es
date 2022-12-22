@@ -2,17 +2,25 @@
  * array-gpio/gpio-output.js
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
-import rpi from "./rpi.js";
-
-export type GpioBit = 0 | 1 | boolean;
-export type StateCallback = (state: GpioBit) => void;
+import rpi, { outputPin, pinStateMap } from "./rpi.js";
+import {
+  GpioBit,
+  GpioMode,
+  GpioPin,
+  GpioState,
+  StateCallback,
+} from "./types.js";
 
 /* OnOff helper function */
-function OnOff(pin: number, c: GpioBit, t: "w", cb?: StateCallback) {
+function OnOff(pin: GpioPin, c: GpioBit, t: "w", cb?: StateCallback) {
+  console.log({ pin, c });
+
   let state: GpioBit;
   if (c === 1 || c === true) {
+    console.log("will write 1");
     rpi.gpio_write(pin, 1); // returns 1
     state = true;
     if (t === "w") {
@@ -33,23 +41,23 @@ function OnOff(pin: number, c: GpioBit, t: "w", cb?: StateCallback) {
 }
 
 function OnOffDelayWrapper(
-  pin: number,
+  pin: GpioPin,
   bit: GpioBit,
   delay?: number,
   cb?: StateCallback
 ) {
-  if (!["number", undefined].includes(typeof delay))
+  if (!["number", "undefined"].includes(typeof delay))
     throw new Error("invalid delay argument");
-  if (!["function", undefined].includes(typeof cb))
+  if (!["function", "undefined"].includes(typeof cb))
     throw new Error("invalid callback, is it a function?");
 
   if (delay) {
     setTimeout(() => OnOff(pin, 1, "w", cb), delay);
-  } else OnOff(pin, 1, "w", cb);
+  } else OnOff(pin, bit, "w", cb);
 }
 
 /* pulse helper function */
-function startPulse(pin: number, timeout: number, cb?: StateCallback) {
+function startPulse(pin: GpioPin, timeout: number, cb?: StateCallback) {
   rpi.gpio_write(pin, 1);
   setTimeout(function () {
     rpi.gpio_write(pin, 0);
@@ -84,8 +92,7 @@ function startPulse(pin: number, timeout: number, cb?: StateCallback) {
  * Gpio output class module
  */
 export default class GpioOutput {
-  _index: number;
-  pin: number;
+  pin: GpioPin;
 
   stop: number;
   start: number;
@@ -101,8 +108,7 @@ export default class GpioOutput {
   delayOn: (delay?: number, cb?: StateCallback) => void;
   delayOff: (delay?: number, cb?: StateCallback) => void;
 
-  constructor(i: number, pin: number) {
-    this._index = i;
+  constructor(pin: GpioPin) {
     this.pin = pin;
 
     this.stop = 0;
@@ -118,33 +124,51 @@ export default class GpioOutput {
     this.delayOn = this.on;
     this.delayOff = this.off;
 
+    return outputPin.get(pin) ?? this;
+
     //this.pulse = this.startPulse;
     //this.loop = this.processLoop;
   }
 
-  open() {
-    rpi.gpio_open(this.pin, 1);
+  isAvailable() {
+    return pinStateMap.get(this.pin) === GpioMode.OUTPUT;
+  }
+
+  ensureAvailable() {
+    if (!this.isAvailable())
+      throw new Error("This pin is not configured as Output");
+  }
+
+  open(initState: GpioState = GpioState.LOW) {
+    if (this.isAvailable()) throw new Error("This pin is already an output");
+    rpi.gpio_mk_output(this.pin, initState);
     return this.state;
   }
 
   close() {
+    this.ensureAvailable();
     rpi.gpio_close(this.pin);
-    return this.state;
   }
 
   get state() {
+    this.ensureAvailable();
     return Boolean(rpi.gpio_read(this.pin));
   }
 
   get isOn() {
-    return this.state;
+    this.ensureAvailable();
+    return this.read() === GpioState.HIGH;
   }
 
   get isOff() {
-    return !this.state;
+    this.ensureAvailable();
+    return this.read() === GpioState.LOW;
   }
 
-  read(cb?: (state: 0 | 1) => void) {
+  read(): GpioState;
+  read(cb: StateCallback): NodeJS.Immediate;
+  read(cb?: StateCallback) {
+    this.ensureAvailable();
     const s = rpi.gpio_read(this.pin);
     if (!cb) {
       return s;
@@ -158,6 +182,7 @@ export default class GpioOutput {
   }
 
   write(bit: GpioBit, cb?: () => void) {
+    this.ensureAvailable();
     if (bit === undefined) throw new Error("missing control bit argument");
     if (![0, 1, true, false].includes(bit))
       throw new Error("invalid control bit argument");
@@ -168,12 +193,14 @@ export default class GpioOutput {
   }
 
   on(arg1?: number | StateCallback, arg2?: StateCallback) {
+    this.ensureAvailable();
     const delay = typeof arg1 === "number" ? arg1 : undefined;
     const cb = typeof arg1 === "function" ? arg1 : arg2;
     OnOffDelayWrapper(this.pin, true, delay, cb);
   }
 
   off(arg1?: number | StateCallback, arg2?: StateCallback) {
+    this.ensureAvailable();
     const delay = typeof arg1 === "number" ? arg1 : undefined;
     const cb = typeof arg1 === "function" ? arg1 : arg2;
     OnOffDelayWrapper(this.pin, false, delay, cb);
@@ -181,6 +208,7 @@ export default class GpioOutput {
 
   /* create a pulse with a duration of t, reverse of on() or delayOn() */
   pulse(duration: number, cb?: StateCallback) {
+    this.ensureAvailable();
     this.on();
 
     if ((typeof duration as unknown) !== "number")

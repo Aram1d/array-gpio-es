@@ -2,71 +2,88 @@
  * array-gpio/gpio-input.js
  *
  * Copyright(c) 2017 Ed Alegrid
+ * Copyright(c) 2022 Wilfried Sugniaux
  * MIT Licensed
  */
-import rpi, { InputEdge, WatchCallback } from "./rpi.js";
-import { StateCallback } from "./gpio-output.js";
-
-export type InResState = "pu" | "pd" | "none";
+import rpi, { inputPin, pinStateMap } from "./rpi.js";
+import {
+  Edges,
+  GpioMode,
+  GpioPin,
+  GpioState,
+  IntR,
+  StateCallback,
+  WatchCallback,
+} from "./types.js";
 
 /*
  * Gpio input class module
  */
 class GpioInput {
-  _index: number;
-  pin: number;
-  setR: (x: InResState) => void;
-  defaultEdge: InputEdge;
+  pin: GpioPin;
+  defaultIntR: IntR;
+  defaultEdge: Edges;
 
   constructor(
-    i: number,
-    pin: number,
-    options: { intR: InResState; edge: InputEdge }
+    pin: GpioPin,
+    options: { intR: IntR; edge: Edges } = { intR: IntR.OFF, edge: Edges.BOTH }
   ) {
-    this._index = i;
     this.pin = pin;
+    this.defaultIntR = options.intR;
     this.defaultEdge = options.edge;
 
-    const { intR } = options;
-    this.intR(intR);
+    return inputPin.get(pin) ?? this;
+  }
 
-    this.setR = this.intR;
+  isAvailable() {
+    return pinStateMap.get(this.pin) === GpioMode.INPUT;
+  }
+
+  ensureAvailable() {
+    if (!this.isAvailable())
+      throw new Error("This pin is not configured as input");
   }
 
   open() {
-    rpi.gpio_open(this.pin, 0);
+    if (this.isAvailable()) throw new Error("This pin is already an input");
+    rpi.gpio_mk_input(this.pin, {
+      intR: this.defaultIntR,
+      edge: this.defaultEdge,
+    });
   }
 
   close() {
+    this.ensureAvailable();
+    this.unwatch();
     rpi.gpio_close(this.pin);
   }
 
   get state() {
+    this.ensureAvailable();
     return Boolean(rpi.gpio_read(this.pin));
   }
 
   get isOn() {
+    this.ensureAvailable();
     return this.state;
   }
 
   get isOff() {
+    this.ensureAvailable();
     return !this.state;
   }
 
-  intR(x: InResState) {
-    if (x === "none") {
-      return rpi.gpio_enable_pud(this.pin, 0);
-    } else if (x === "pu") {
-      return rpi.gpio_enable_pud(this.pin, 2);
-    } else if (x === "pd") {
-      return rpi.gpio_enable_pud(this.pin, 1);
-    }
+  intR(intRes: IntR) {
+    this.ensureAvailable();
+    rpi.gpio_enable_pud(this.pin, intRes);
   }
 
-  read(): 0 | 1;
+  read(): GpioState;
   read(cb: StateCallback): NodeJS.Immediate;
   read(cb?: StateCallback) {
-    if (![undefined, "function"].includes(typeof cb))
+    this.ensureAvailable();
+
+    if (!["undefined", "function"].includes(typeof cb))
       throw new Error("invalid callback argument");
 
     const s = rpi.gpio_read(this.pin);
@@ -75,12 +92,17 @@ class GpioInput {
 
   watch(
     cb: WatchCallback,
-    { edge, pollRate }: { edge?: InputEdge; pollRate?: number }
+    { edge, pollRate }: { edge?: Edges; pollRate?: number } = {
+      edge: Edges.BOTH,
+      pollRate: 100,
+    }
   ) {
-    rpi.gpio_watchPin(this.pin, cb, edge, pollRate);
+    this.ensureAvailable();
+    return rpi.gpio_watchPin(this.pin, cb, edge, pollRate);
   }
 
   unwatch() {
+    this.ensureAvailable();
     rpi.gpio_unwatchPin(this.pin);
   }
 }
