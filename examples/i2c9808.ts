@@ -1,8 +1,7 @@
 /* Using MCP9808 ambient temperatute sensor */
+import r from "../lib/array-gpio";
 
-const r = require("array-gpio");
-
-let i2c = r.startI2C(); // using SDA1 and SCL1 pins (pin 3 & 5)
+let i2c = r.setI2C(); // using SDA1 and SCL1 pins (pin 3 & 5)
 //let i2c = r.startI2C(1); // using SDA1 and SCL1 pins (pin 3 & 5)
 //let i2c = r.startI2C(0); // using SDA0 and SCL0 pins (pin 27 & 28)
 
@@ -39,13 +38,8 @@ function computeTemp() {
   return Temp;
 }
 
-function precisionRound(number, precision) {
-  var factor = Math.pow(10, precision);
-  return Math.round(number * factor) / factor;
-}
-
 /* get temperature reading */
-var getTemp = (exports.getTemp = function () {
+const getTemp = (exports.getTemp = function () {
   /* access the internal 16-bit configuration register within MCP9808 */
   wbuf[0] = 0x01; // address of configuration register
   wbuf[1] = 0x02; // register upper byte, THYST set with +1.5 C
@@ -60,11 +54,9 @@ var getTemp = (exports.getTemp = function () {
   i2c.read(rbuf, 2);
 
   /* function call to compute temperature */
-  var T = computeTemp();
+  const T = computeTemp();
   //var t = precisionRound(T, 2);
-  var t = T.toFixed(2);
-
-  return t;
+  return T.toFixed(2);
 });
 
 console.log("temp using i2c", getTemp());

@@ -1,5 +1,5 @@
 /*!
- * array-gpio/pwm.js
+ * array-gpio/pwm.ts
  *
  * Copyright(c) 2017 Ed Alegrid
  * Copyright(c) 2022 Wilfried Sugniaux
@@ -19,7 +19,7 @@ class PWM {
   _freq: number;
   _pwmStarted: boolean;
   _pinOnlySetup: boolean;
-  constructor(pin: PwmPins, freq: number, T: number, pw: number) {
+  constructor(pin: PwmPins, freq: number = 100, T?: number, pw?: number) {
     /* track pwm object */
     pwmObject += 1;
     exports.pwmObject = pwmObject;

@@ -110,7 +110,7 @@ function endTime(start: Date, m: 0 | 1) {
   }
 }
 
-class GpioGroup extends Array<GpioInput> {
+export class GpioGroup extends Array<GpioInput> {
   watchInputs(cb: WatchCallback, edge?: Edges, td?: number) {
     this.forEach(({ pin }) => rpi.gpio_watchPin(pin, cb, edge, td));
   }

@@ -1,7 +1,7 @@
 {
-  "name": "array-gpio",
-  "version": "2.0.0",
-  "description": "array-gpio is low-level javascript library for Raspberry Pi using direct register control.",
+  "name": "array-gpio-es",
+  "version": "1.0.0",
+  "description": "array-gpio-es is low-level javascript library for Raspberry Pi using direct register control.",
   "main": "./lib/array-gpio.js",
   "type": "module",
   "cpu": [
@@ -55,11 +55,11 @@
     "iot",
     "IoT"
   ],
-  "homepage": "https://github.com/EdAlegrid/array-gpio",
-  "bugs": "https://github.com/EdAlegrid/array-gpio/issues",
-  "repository": "EdAlegrid/array-gpio",
+  "homepage": "https://github.com/Aram1d/array-gpio-es",
+  "bugs": "https://github.com/Aram1d/array-gpio-es/issues",
+  "repository": "Aram1d/array-gpio-es",
   "author": {
-    "name": "Ed Alegrid",
-    "email": "ealegrid@gmail.com"
+    "name": "Ed Alegrid / W.SUGNIAUX",
+    "email": "ealegrid@gmail.com / wsu287@gmail.com"
   }
 }

@@ -1,9 +1,11 @@
 [![Version npm](https://img.shields.io/npm/v/array-gpio.svg?logo=npm)](https://www.npmjs.com/package/array-gpio)
-![Custom badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fwww.node-m2m.com%2Farray-gpio%2Fbuild-badge)
+![Custom badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fwww.node-m2m.com%2Farray-gpio-es%2Fbuild-badge)
 
-# array-gpio
+# array-gpio-es
 
-**array-gpio** is a low-level javascript library for Raspberry Pi using a direct register control.
+**array-gpio-es ** is a low-level javascript library for Raspberry Pi using a direct register control.
+
+**Please be aware this documentation is not fully updated from the original (only examples have been updated now) [array-gpio](https://www.npmjs.com/package/array-gpio) package. Consider using typescript to know how the API works.**
 
 It maps the ARM peripheral registers in memory using */dev/mem* for PWM, I2C, SPI
 and */dev/gpiomem* for GPIO control.
@@ -23,7 +25,6 @@ All pin numbering used on this module are based on the RPI board's pinout diagra
 
 <br>
 
-For IoT or machine-to-machine applications, please check [m2m](https://www.npmjs.com/package/m2m) using array-gpio.
 
 # Table of contents
 1. [Supported Raspberry Pi Devices](#supported-raspberry-pi-devices)
@@ -66,7 +67,7 @@ For IoT or machine-to-machine applications, please check [m2m](https://www.npmjs
 
 ## Installation
 ```console
-$ npm install array-gpio
+$ npm install array-gpio-es
 ```
 
 # Quick Tour
@@ -77,10 +78,10 @@ $ npm install array-gpio
 Connect a momentary *switch button* on pin **11** and an *led* on pin **33**.
 ![](https://raw.githubusercontent.com/EdoLabs/src3/master/array-gpio-quick-example1.svg?sanitize=true)
 
-Using **in** and **out** method from *array-gpio* object module
+Using **in** and **out** method from *array-gpio-es* object module
 ```js
 // create a raspberry pi (r) object
-import r from 'array-gpio';
+import r from 'array-gpio-es';
 
 // set pin 11 as input
 let input = r.in(11);
@@ -92,7 +93,7 @@ let output = r.out(33);
 Alternatively using the object destructuring assignment pattern, you can use the **setInput** and **setOutput** methods to create your input/output objects
 ```js
 
-import r from 'array-gpio';
+import r from 'array-gpio-es';
 const {setInput, setOutput} = r;
 
 // set pin 11 as input
@@ -106,7 +107,7 @@ let led = setOutput(33);
 ### Monitor the state of an input object
 
 ```js
-import r from 'array-gpio';
+import r from 'array-gpio-es';
 
 let sw = r.in(11);
 let led = r.out(33);
@@ -129,7 +130,7 @@ To monitor multiple input objects, you can use the **watchInput()** method.
 
 Connect a momentary *switch button* on pin **11, 13, 15** and **19** and an *led* on pin **33** and **35**.
 ```js
-import r from 'array-gpio';
+import r from 'array-gpio-es';
 
 let sw1 = r.in(11), sw2 = r.in(13), sw3 = r.in(15), sw4 = r.in(19);
 
@@ -162,7 +163,7 @@ r.watchAll(() => {
 The **isOn** and **isOff** properties are built-in own properties of input/output objects when they are created.
 ![](https://raw.githubusercontent.com/EdoLabs/src3/master/quick-example2.svg?sanitize=true)
 ```js
-import r from 'array-gpio';
+import r from 'array-gpio-es';
 
 let sw = r.in(11);
 let led = r.out(33);
@@ -182,8 +183,8 @@ console.log(led.isOff); // true
 Connect a momentary *switch button* on pin **11** and **13** and an *led* on pin **33**.
 
 ```js
-import r from 'array-gpio';
-const {setInput, setOutput, watchInput} = r;
+import r from 'array-gpio-es';
+const {setInput, setOutput} = r;
 
 let sw1 = setInput(11);
 let sw2 = setInput(13);
@@ -207,11 +208,11 @@ watchInput(() => {
 Connect a momentary *switch button* for each input pin and an *led* for each output pin.
 ![](https://raw.githubusercontent.com/EdoLabs/src3/master/quick-example4.svg?sanitize=true)
 ```js
-const r = require('array-gpio');
+import r from 'array-gpio-es';
 
 const sw = r.in([11, 13], {index:'pin'});
 // or, to specify different options to each inputs:
-const sw2 = r.in([ { pin: 7, intR: IntR.UP }, { pin: 8, intR: IntR.DN },])
+const sw2 = r.in([{ pin: 7, intR: IntR.UP }, { pin: 8, intR: IntR.DN }])
 
 const led = r.out([33, 35, 37, 36, 38, 40], {index:'pin'});
 
@@ -233,7 +234,7 @@ let LedOff = () => {
   }
 }
 
-r.watchInput(() => {
+sw.watchInputs(() => {
   if(sw[11].isOn){
     LedOn();
   }
@@ -244,10 +245,10 @@ r.watchInput(() => {
 ```
 ### Using forEach to iterate over the array objects
 ```js
-const {setInput, setOutput, watchInput} = require('array-gpio');
+import r from 'array-gpio-es';
 
-const sw = setInput({pin:[11, 13], index:'pin'});
-const led = setOutput({pin:[33, 35, 37, 36, 38, 40], index:'pin'});
+const sw = r.setInput([11, 13], {index:'pin'});
+const led = r.setOutput([33, 35, 37, 36, 38, 40], {index:'pin'});
 
 let LedOn = () => {
   let t = 0;
@@ -265,7 +266,7 @@ let LedOff = () => {
   })
 }
 
-watchInput(() => {
+sw.watch(() => {
   sw.forEach((input) => {
     if(input.pin === 11 && input.isOn){
       ledOn();
@@ -283,14 +284,16 @@ watchInput(() => {
 Connect a momentary *switch button* on pin **11, 13, 15** and an *led* on pin **33**.
 
 ```js
-const {setInput, setOutput, watchInput} = require('array-gpio');
+import r from 'array-gpio-es';
 
-let sw1 = setInput(11);
-let sw2 = setInput(13);
-let sw3 = setInput(15);
-let led = setOutput(33);
+let sw1 = r.setInput(11);
+let sw2 = r.setInput(13);
+let sw3 = r.setInput(15);
+let led = r.setOutput(33);
 
-watchInput(() => {
+const inputs = new GpioGroup(sw1, sw2, sw3);
+
+inputs.watchInputs(() => {
   // press sw1 to create a pulse with a duration of 50 ms  
   if(sw1.isOn){
     led.pulse(50);
